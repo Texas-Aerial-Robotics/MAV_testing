@@ -21,7 +21,11 @@ CONTROL_CLAMP = 0.5
 
 # TODO Needs to be AMSL (sea level) not AGL
 TARGET_ALTITUDE = 6
-TARGET_MARKER = 20
+TARGET_MARKER = os.getenv("MARKER_NUM", 4)
+
+DROP_ALT = 1
+
+SPEED = 1.5 # m/s
 
 # Time to wait after taking off
 TAKEOFF_DELAY = 10
@@ -32,6 +36,7 @@ LAT_LONG_THRESHOLD = 0.00001
 POS_REACH_TIMEOUT = 240
 
 location = None
+takeoff_alt = None
 
 log_filename = datetime.now().strftime("log_%Y-%m-%d_%H-%M-%S.log")
 
@@ -267,8 +272,6 @@ async def align_to_marker(drone, video_source, marker=TARGET_MARKER):
                     last_marker_position = bbox[i]
                     marker_detected_time = time()
                     marker_found = True
-                    else:
-                        logger.debug(f"Found target marker {marker_id}")
 
         if not marker_found and last_marker_position is not None:
             # Use last known position if within timeout
@@ -325,6 +328,7 @@ async def align_to_marker(drone, video_source, marker=TARGET_MARKER):
 
 async def main():
     global location
+    global takeoff_alt
 
     video_stream = Video(port=5601)
 
@@ -359,6 +363,11 @@ async def main():
 
     # logger.info("Offboard mode started.")
 
+    
+    out = await drone.mission_raw.import_qgroundcontrol_mission(os.path.abspath("cscan.plan"))
+    await drone.mission.clear_mission()
+    await drone.mission_raw.upload_geofence(out.geofence_items)
+
     logger.info("Waiting for position...")
 
     armed = False
@@ -370,11 +379,21 @@ async def main():
             logger.info(f"Got location: {latitude:.5f}, {longitude:.5f}, {altitude:.2f}!")
 
             if not armed:
+                async for pos in drone.telemetry.position():
+                    logger.debug("Getting initial pos...")
+                    lat = pos.latitude_deg
+                    lon = pos.longitude_deg
+                    alt = pos.absolute_altitude_m
+                    takeoff_alt = alt
+                    break
+
                 logger.info("Arming...")
                 await drone.action.arm()
 
-                logger.info("Taking off...")
+                await drone.action.set_current_speed(SPEED)
                 await drone.action.set_takeoff_altitude(TAKEOFF_ALTITUDE)
+                await asyncio.sleep(4)
+                logger.info("Taking off...")
                 await drone.action.takeoff()
 
                 await asyncio.sleep(TAKEOFF_DELAY)
@@ -401,6 +420,21 @@ async def main():
             #    # Move to coordinates again on next loop iteration
             #    logger.info("Retrying move to coordinates")
             #    continue
+
+
+            lat = None
+            lon = None
+            alt = None
+            async for pos in drone.telemetry.position():
+                logger.debug("Getting initial pos...")
+                lat = pos.latitude_deg
+                lon = pos.longitude_deg
+                alt = pos.absolute_altitude_m
+                takeoff_alt = alt
+                position = pos
+                break
+
+            await drone.action.goto_location(lat, lon, takeoff_alt + DROP_ALT, 0)
 
 
             logger.info("Dropping payload!")
