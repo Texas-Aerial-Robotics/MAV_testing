@@ -46,7 +46,7 @@ def get_keyboard_input():
 async def main():
     print("Connecting to drone...")
     drone = System()
-    await drone.connect(system_address="udp://:14540")
+    await drone.connect(system_address="udp://:14445")
 
     print("Waiting for drone to connect...")
     async for state in drone.core.connection_state():
@@ -54,11 +54,11 @@ async def main():
             print("-- Connected to drone!")
             break
 
-    print("Waiting for global position estimate...")
-    async for health in drone.telemetry.health():
-        if health.is_global_position_ok and health.is_home_position_ok:
-            print("-- Global position estimate OK")
-            break
+    # print("Waiting for global position estimate...")
+    # async for health in drone.telemetry.health():
+    #     if health.is_global_position_ok and health.is_home_position_ok:
+    #         print("-- Global position estimate OK")
+    #         break
 
     print("-- Arming")
     await drone.action.arm()

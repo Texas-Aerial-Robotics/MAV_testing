@@ -24,10 +24,10 @@ async def run():
             break
 
     print("-- Arming")
-    await drone.action.arm()
+    await drone.action.arm(10)
 
     print("-- Taking off")
-    await drone.action.takeoff()
+    await drone.action.takeoff(10)
 
     await asyncio.sleep(10)
 
