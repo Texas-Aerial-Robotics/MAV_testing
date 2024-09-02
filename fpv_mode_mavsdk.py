@@ -1,6 +1,6 @@
 import asyncio
 from mavsdk import System
-from mavsdk.offboard import VelocityNedYaw
+from mavsdk.offboard import VelocityBodyYawspeed
 import pygame
 
 def init():
@@ -20,27 +20,28 @@ def getKey(keyName):
     return ans
 
 def get_keyboard_input():
-    lr, fb, ud, yv = 0, 0, 0, 0
-    speed = 5
+    forward, right, down, yaw_speed = 0, 0, 0, 0
+    speed = 2.5  # meters/second
+    yaw_speed_rate = 50  # degrees/second
 
     if getKey("a"):
-        lr = -speed
+        right = -speed
     elif getKey("d"):
-        lr = speed
+        right = speed
     if getKey("UP"):
-        ud = speed
+        down = -speed  # Going up decreases the down speed in body frame
     elif getKey("DOWN"):
-        ud = -speed
+        down = speed
     if getKey("w"):
-        fb = speed
+        forward = speed
     elif getKey("s"):
-        fb = -speed
+        forward = -speed
     if getKey("q"):
-        yv = speed
+        yaw_speed = yaw_speed_rate
     elif getKey("e"):
-        yv = -speed
+        yaw_speed = -yaw_speed_rate
 
-    return [lr, fb, ud, yv]
+    return [forward, right, down, yaw_speed]
 
 async def main():
     print("Connecting to drone...")
@@ -69,16 +70,16 @@ async def main():
     await asyncio.sleep(5)
 
     # Initial setpoint before starting offboard mode
-    initial_velocity = VelocityNedYaw(north_m_s=0.0, east_m_s=0.0, down_m_s=0.0, yaw_deg=0.0)
-    await drone.offboard.set_velocity_ned(initial_velocity)
+    initial_velocity = VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0)
+    await drone.offboard.set_velocity_body(initial_velocity)
 
     print("-- Setting offboard mode")
     await drone.offboard.start()
 
     while True:
         vals = get_keyboard_input()
-        velocity = VelocityNedYaw(north_m_s=vals[1], east_m_s=vals[0], down_m_s=-vals[2], yaw_deg=vals[3])
-        await drone.offboard.set_velocity_ned(velocity)
+        velocity = VelocityBodyYawspeed(vals[0], vals[1], vals[2], vals[3])
+        await drone.offboard.set_velocity_body(velocity)
 
         # Breaking the loop and landing if 'l' key is pressed
         if getKey("l"):
