@@ -169,24 +169,23 @@ def detect_and_estimate_pose(input_frame):
 
     #--- Define the aruco dictionary
     aruco_dict  = aruco.getPredefinedDictionary(aruco.DICT_ARUCO_ORIGINAL)
-    parameters  = aruco.DetectorParameters_create()
-    #parameters  = aruco.DetectorParameters()
+    #parameters  = aruco.DetectorParameters_create()     #version 4.2.0
+    parameters  = aruco.DetectorParameters()     #version 4.10.0
+
 
     #-- Font for the text in the image
     font = cv2.FONT_HERSHEY_PLAIN
 
-    #-- Read the camera frame
-    #ret, frame = cap.read()
-    frame = input_frame
+    #-- make copy of input_frame since it is read-only
+    writable_frame = input_frame.copy()
 
     #-- Convert in gray scale
-    gray    = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) #-- remember, OpenCV stores color images in Blue, Green, Red
+    gray    = cv2.cvtColor(writable_frame, cv2.COLOR_BGR2GRAY) #-- remember, OpenCV stores color images in Blue, Green, Red
 
     #-- Find all the aruco markers in the image
-    corners, ids, rejected = aruco.detectMarkers(image=gray, dictionary=aruco_dict, parameters=parameters,
-                            )
-    
-    #cameraMatrix=camera_matrix, distCoeff=camera_distortion
+    #corners, ids, rejected = aruco.detectMarkers(image=gray, dictionary=aruco_dict, parameters=parameters,   ) #version 4.2.0
+    detector = aruco.ArucoDetector(aruco_dict, parameters)          #version 4.10.0
+    corners, ids, rejected = detector.detectMarkers(gray)
     
     if ids is not None and ids[0] == id_to_find:
         
@@ -200,13 +199,13 @@ def detect_and_estimate_pose(input_frame):
         rvec, tvec = ret[0][0,0,:], ret[1][0,0,:]
 
         #-- Draw the detected marker and put a reference frame over it
-        aruco.drawDetectedMarkers(frame, corners)
+        aruco.drawDetectedMarkers(writable_frame, corners)
         #aruco.drawAxis(frame, camera_matrix, camera_distortion, rvec, tvec, 10)
-        cv2.drawFrameAxes(frame, camera_matrix, camera_distortion, rvec, tvec, 10)
+        cv2.drawFrameAxes(writable_frame, camera_matrix, camera_distortion, rvec, tvec, 10)
 
         #-- Print the tag position in camera frame
         str_position = "MARKER Position x=%4.0f  y=%4.0f  z=%4.0f"%(tvec[0], tvec[1], tvec[2])
-        cv2.putText(frame, str_position, (0, 100), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
+        cv2.putText(writable_frame, str_position, (0, 100), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
 
         #-- Obtain the rotation matrix tag->camera
         R_ct    = np.matrix(cv2.Rodrigues(rvec)[0])
@@ -218,23 +217,23 @@ def detect_and_estimate_pose(input_frame):
         #-- Print the marker's attitude respect to camera frame
         str_attitude = "MARKER Attitude r=%4.0f  p=%4.0f  y=%4.0f"%(math.degrees(roll_marker),math.degrees(pitch_marker),
                             math.degrees(yaw_marker))
-        cv2.putText(frame, str_attitude, (0, 150), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
+        cv2.putText(writable_frame, str_attitude, (0, 150), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
 
 
         #-- Now get Position and attitude f the camera respect to the marker
         pos_camera = -R_tc*np.matrix(tvec).T
 
         str_position = "CAMERA Position x=%4.0f  y=%4.0f  z=%4.0f"%(pos_camera[0], pos_camera[1], pos_camera[2])
-        cv2.putText(frame, str_position, (0, 200), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
+        cv2.putText(writable_frame, str_position, (0, 200), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
 
         #-- Get the attitude of the camera respect to the frame
         roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(R_flip*R_tc)
         str_attitude = "CAMERA Attitude r=%4.0f  p=%4.0f  y=%4.0f"%(math.degrees(roll_camera),math.degrees(pitch_camera),
                             math.degrees(yaw_camera))
-        cv2.putText(frame, str_attitude, (0, 250), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
+        cv2.putText(writable_frame, str_attitude, (0, 250), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
 
     #--- Display the frame
-    cv2.imshow("Drone Camera Stream with ArUco Detection", frame)
+    cv2.imshow("Drone Camera Stream with ArUco Detection", writable_frame)
 
 
 # Main drone control and ArUco marker detection function
@@ -278,15 +277,10 @@ async def main():
         # If frame is available, display the video feed
         if video.frame_available():
 
-            # print(f"Detected Frames!")
-
-
             # Detect ArUco markers
             frame = video.frame()
             detect_and_estimate_pose(frame)
 
-
-            # cv2.imshow("Drone Camera Stream with ArUco Detection", frame)
 
         # Check for 'l' key to land the drone
         if get_key("l"):
