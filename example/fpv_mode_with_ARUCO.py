@@ -82,22 +82,22 @@ class Video():
 
 
 # ArUco detection function
-def findArucoMarkers(img, markerSize=6, totalMarkers=250, draw=True):
-    imgGray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+# def findArucoMarkers(img, markerSize=6, totalMarkers=250, draw=True):
+#     imgGray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    # Define dictionary and parameters for ArUco detection
-    key = getattr(aruco, f'DICT_{markerSize}X{markerSize}_{totalMarkers}')
-    arucoDict = aruco.getPredefinedDictionary(key)
-    arucoParam = aruco.DetectorParameters_create()
+#     # Define dictionary and parameters for ArUco detection
+#     key = getattr(aruco, f'DICT_{markerSize}X{markerSize}_{totalMarkers}')
+#     arucoDict = aruco.getPredefinedDictionary(key)
+#     arucoParam = aruco.DetectorParameters_create()
 
-    # Detect markers using the older OpenCV method
-    bbox, ids, rejected = aruco.detectMarkers(imgGray, arucoDict, parameters=arucoParam)
+#     # Detect markers using the older OpenCV method
+#     bbox, ids, rejected = aruco.detectMarkers(imgGray, arucoDict, parameters=arucoParam)
 
-    # Optionally draw the markers on the image
-    if draw and ids is not None:
-        aruco.drawDetectedMarkers(img, bbox, ids)
+#     # Optionally draw the markers on the image
+#     if draw and ids is not None:
+#         aruco.drawDetectedMarkers(img, bbox, ids)
 
-    return [bbox, ids]
+#     return [bbox, ids]
 
 
 # Pygame initialization for drone control
@@ -186,18 +186,18 @@ async def main():
             frame = video.frame()
 
             # Detect ArUco markers
-            arucoFound = findArucoMarkers(frame)
+            # arucoFound = findArucoMarkers(frame)
             cv2.imshow("Drone Camera Stream with ArUco Detection", frame)
 
             # Loop through detected ArUco markers and track IDs
-            if len(arucoFound[0]) != 0:  # Check if any markers are detected
-                for bbox, id in zip(arucoFound[0], arucoFound[1]):
-                    id_value = int(id[0])  # Convert ID to integer
-                    if id_value not in detected_ids:  # Check if ID is new
-                        detected_ids.append(id_value)  # Add new ID to list
-                        print(f"New ID detected: {id_value}")
+            # if len(arucoFound[0]) != 0:  # Check if any markers are detected
+            #     for bbox, id in zip(arucoFound[0], arucoFound[1]):
+            #         id_value = int(id[0])  # Convert ID to integer
+            #         if id_value not in detected_ids:  # Check if ID is new
+            #             detected_ids.append(id_value)  # Add new ID to list
+            #             print(f"New ID detected: {id_value}")
 
-            print(f"Current detected IDs: {detected_ids}")  # Print current detected IDs
+            # print(f"Current detected IDs: {detected_ids}")  # Print current detected IDs
 
         # Check for 'l' key to land the drone
         if get_key("l"):

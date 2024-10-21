@@ -46,7 +46,7 @@ def get_keyboard_input():
 async def main():
     print("Connecting to drone...")
     drone = System()
-    await drone.connect(system_address="udp://:14445")
+    await drone.connect(system_address="udp://:14540")
 
     print("Waiting for drone to connect...")
     async for state in drone.core.connection_state():
