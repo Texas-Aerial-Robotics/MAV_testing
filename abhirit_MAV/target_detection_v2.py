@@ -169,7 +169,6 @@ def detect_and_estimate_pose(input_frame):
 
     #--- Define the aruco dictionary
     aruco_dict  = aruco.getPredefinedDictionary(aruco.DICT_ARUCO_ORIGINAL)
-    #parameters  = aruco.DetectorParameters_create()     #version 4.2.0
     parameters  = aruco.DetectorParameters()     #version 4.10.0
 
 
@@ -183,11 +182,14 @@ def detect_and_estimate_pose(input_frame):
     gray    = cv2.cvtColor(writable_frame, cv2.COLOR_BGR2GRAY) #-- remember, OpenCV stores color images in Blue, Green, Red
 
     #-- Find all the aruco markers in the image
-    #corners, ids, rejected = aruco.detectMarkers(image=gray, dictionary=aruco_dict, parameters=parameters,   ) #version 4.2.0
     detector = aruco.ArucoDetector(aruco_dict, parameters)          #version 4.10.0
     corners, ids, rejected = detector.detectMarkers(gray)
-    
+
+    marker_detected = False
+
     if ids is not None and ids[0] == id_to_find:
+
+        marker_detected = True
         
         #-- ret = [rvec, tvec, ?]
         #-- array of rotation and position of each marker in camera frame
@@ -232,8 +234,25 @@ def detect_and_estimate_pose(input_frame):
                             math.degrees(yaw_camera))
         cv2.putText(writable_frame, str_attitude, (0, 250), font, 1, (0, 255, 0), 2, cv2.LINE_AA)
 
-    #--- Display the frame
-    cv2.imshow("Drone Camera Stream with ArUco Detection", writable_frame)
+
+        #generate velocity vector
+        target_distance = np.linalg.norm(tvec)
+        velocity_scale = 0.1  # Scaling factor for approaching speed
+
+        # Calculate the approach velocities
+        forward_velocity = -velocity_scale * tvec[2]  # Move forward/backward
+        right_velocity = -velocity_scale * tvec[0]    # Move left/right
+        down_velocity = -velocity_scale * tvec[1]     # Move up/down
+
+        #--- Display the frame
+        cv2.imshow("Drone Camera Stream with ArUco Detection", writable_frame)
+
+        return (forward_velocity, right_velocity, down_velocity, 0), marker_detected
+
+    else:
+        #--- Display the frame
+        cv2.imshow("Drone Camera Stream with ArUco Detection", writable_frame)
+        return (0, 0, 0, 0), marker_detected
 
 
 # Main drone control and ArUco marker detection function
@@ -266,20 +285,24 @@ async def main():
 
     # Initialize GStreamer video object for capturing the drone's camera feed
     video = Video()
-    detected_ids = []  # List to keep track of detected ArUco marker IDs
+    detected_ids = []  # List to keep track of detected ArUco marker 
 
     while True:
-        # Get keyboard inputs and control the drone
-        vals = get_keyboard_input()
-        velocity = VelocityBodyYawspeed(vals[0], vals[1], vals[2], vals[3])
-        await drone.offboard.set_velocity_body(velocity)
 
         # If frame is available, display the video feed
         if video.frame_available():
-
             # Detect ArUco markers
             frame = video.frame()
-            detect_and_estimate_pose(frame)
+            vals, marker_detected = detect_and_estimate_pose(frame)
+            if marker_detected:
+                velocity = VelocityBodyYawspeed(vals[0], vals[1], vals[2], vals[3])
+                await drone.offboard.set_velocity_body(velocity)
+
+            else:
+                # Get keyboard inputs and control the drone
+                vals = get_keyboard_input()
+                velocity = VelocityBodyYawspeed(vals[0], vals[1], vals[2], vals[3])
+                await drone.offboard.set_velocity_body(velocity)
 
 
         # Check for 'l' key to land the drone
