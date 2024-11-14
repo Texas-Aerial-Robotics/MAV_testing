@@ -1,7 +1,7 @@
-# Scripting drone navigation with Pymavlink
+# Scripting drone navigation with MAVSDK
 ---
 
-This project will test pymavlink to navigate TARs drones autonomously.
+This project will test MAVSDK to navigate TARs drones autonomously.
 
 ## Sources:
 
@@ -10,6 +10,7 @@ This project will test pymavlink to navigate TARs drones autonomously.
 - Mission Planner: https://ardupilot.org/planner/docs/mission-planner-installation.html
 - QGroundControl: https://docs.qgroundcontrol.com/master/en/qgc-user-guide/getting_started/download_and_install.html
 - jMAVSim: https://github.com/PX4/jMAVSim , https://docs.px4.io/main/en/sim_jmavsim/index.html
+- MAVSDK: https://mavsdk.mavlink.io/main/en/index.html
 
 
 RUN THIS TO START MAVSDK_SERVER
