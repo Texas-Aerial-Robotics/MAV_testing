@@ -15,6 +15,13 @@ from gi.repository import Gst
 id_to_find  = 72
 marker_size  = 10 #- [cm]
 
+# Global variable to store pose estimation result
+pose_estimation_result = (0, 0, 0, 0)  # (forward, right, down, yaw_speed)
+marker_detected = False
+
+# Aruco following average filter parameters
+buffer_size = 5  # Adjust this size as needed (higher values = more smoothing)
+x_buffer, y_buffer, z_buffer = [], [], []  # Buffers for tvec components
 
 # GStreamer-based video class for capturing drone video
 class Video():
@@ -128,11 +135,9 @@ def get_keyboard_input():
     return [forward, right, down, yaw_speed]
 
 
-
-
+#--------------------------------------------------------------------------------------------------
 #FUNCTIONS RELVEANT TO ARUCO DETECTION BELOW
 
-# Checks if a matrix is a valid rotation matrix.
 def isRotationMatrix(R):
     Rt = np.transpose(R)
     shouldBeIdentity = np.dot(Rt, R)
@@ -155,6 +160,17 @@ def rotationMatrixToEulerAngles(R):
         z = 0
     return np.array([x, y, z])
 
+
+# Async function for detecting and estimating pose
+async def detect_and_estimate_pose_task(video):
+    global pose_estimation_result, marker_detected
+    while True:
+        if video.frame_available():
+            frame = video.frame()
+            pose_estimation_result, marker_detected = detect_and_estimate_pose(frame)
+        await asyncio.sleep(0.1)  # Small delay to allow frame updates
+
+
 def detect_and_estimate_pose(input_frame):
     #--- Get the camera calibration path
     calib_path  = "./opencv/camera_calibration/"
@@ -169,7 +185,7 @@ def detect_and_estimate_pose(input_frame):
 
     #--- Define the aruco dictionary
     aruco_dict  = aruco.getPredefinedDictionary(aruco.DICT_ARUCO_ORIGINAL)
-    parameters  = aruco.DetectorParameters()     #version 4.10.0
+    parameters  = aruco.DetectorParameters()
 
 
     #-- Font for the text in the image
@@ -182,13 +198,12 @@ def detect_and_estimate_pose(input_frame):
     gray    = cv2.cvtColor(writable_frame, cv2.COLOR_BGR2GRAY) #-- remember, OpenCV stores color images in Blue, Green, Red
 
     #-- Find all the aruco markers in the image
-    detector = aruco.ArucoDetector(aruco_dict, parameters)          #version 4.10.0
+    detector = aruco.ArucoDetector(aruco_dict, parameters)
     corners, ids, rejected = detector.detectMarkers(gray)
 
     marker_detected = False
 
     if ids is not None and ids[0] == id_to_find:
-
         marker_detected = True
         
         #-- ret = [rvec, tvec, ?]
@@ -202,7 +217,6 @@ def detect_and_estimate_pose(input_frame):
 
         #-- Draw the detected marker and put a reference frame over it
         aruco.drawDetectedMarkers(writable_frame, corners)
-        #aruco.drawAxis(frame, camera_matrix, camera_distortion, rvec, tvec, 10)
         cv2.drawFrameAxes(writable_frame, camera_matrix, camera_distortion, rvec, tvec, 10)
 
         #-- Print the tag position in camera frame
@@ -237,7 +251,7 @@ def detect_and_estimate_pose(input_frame):
 
         #generate velocity vector
         target_distance = np.linalg.norm(tvec)
-        velocity_scale = 0.1  # Scaling factor for approaching speed
+        velocity_scale = 0.075  # Scaling factor for approaching speed
 
         # Calculate the approach velocities
         forward_velocity = -velocity_scale * tvec[2]  # Move forward/backward
@@ -246,13 +260,22 @@ def detect_and_estimate_pose(input_frame):
 
         #--- Display the frame
         cv2.imshow("Drone Camera Stream with ArUco Detection", writable_frame)
-
         return (forward_velocity, right_velocity, down_velocity, 0), marker_detected
 
     else:
         #--- Display the frame
         cv2.imshow("Drone Camera Stream with ArUco Detection", writable_frame)
         return (0, 0, 0, 0), marker_detected
+
+#-------------------------------------------------------------------------------------------------------------------
+
+
+# averaging filter to smoothen travel to aruco marker
+def add_to_buffer(buffer, value, max_size):
+    buffer.append(value)
+    if len(buffer) > max_size:
+        buffer.pop(0)
+    return np.mean(buffer)
 
 
 # Main drone control and ArUco marker detection function
@@ -285,24 +308,30 @@ async def main():
 
     # Initialize GStreamer video object for capturing the drone's camera feed
     video = Video()
-    detected_ids = []  # List to keep track of detected ArUco marker 
+
+    # Start the pose estimation task
+    asyncio.create_task(detect_and_estimate_pose_task(video))
 
     while True:
+        if marker_detected:
+            # Add new tvec values to buffers and get smoothed values
+            vals = pose_estimation_result
+            smoothed_forward_velocity = add_to_buffer(x_buffer, vals[0], buffer_size)
+            smoothed_right_velocity = add_to_buffer(y_buffer, vals[1], buffer_size)
+            smoothed_down_velocity = add_to_buffer(z_buffer, vals[2], buffer_size)
 
-        # If frame is available, display the video feed
-        if video.frame_available():
-            # Detect ArUco markers
-            frame = video.frame()
-            vals, marker_detected = detect_and_estimate_pose(frame)
-            if marker_detected:
-                velocity = VelocityBodyYawspeed(vals[0], vals[1], vals[2], vals[3])
-                await drone.offboard.set_velocity_body(velocity)
+            velocity = VelocityBodyYawspeed(smoothed_forward_velocity, smoothed_right_velocity, smoothed_down_velocity, vals[3])
+            await drone.offboard.set_velocity_body(velocity)
 
-            else:
-                # Get keyboard inputs and control the drone
-                vals = get_keyboard_input()
-                velocity = VelocityBodyYawspeed(vals[0], vals[1], vals[2], vals[3])
-                await drone.offboard.set_velocity_body(velocity)
+        else:
+            # Get keyboard inputs and control the drone
+            vals = get_keyboard_input()
+            # smoothed_forward_velocity = add_to_buffer(x_buffer, vals[0], buffer_size)
+            # smoothed_right_velocity = add_to_buffer(y_buffer, vals[1], buffer_size)
+            # smoothed_down_velocity = add_to_buffer(z_buffer, vals[2], buffer_size)
+            # velocity = VelocityBodyYawspeed(smoothed_forward_velocity, smoothed_right_velocity, smoothed_down_velocity, vals[3])
+            velocity = VelocityBodyYawspeed(vals[0], vals[1], vals[2], vals[3])
+            await drone.offboard.set_velocity_body(velocity)
 
 
         # Check for 'l' key to land the drone
