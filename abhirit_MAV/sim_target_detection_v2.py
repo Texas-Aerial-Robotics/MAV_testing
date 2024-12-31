@@ -136,7 +136,7 @@ def get_keyboard_input():
 
 
 #--------------------------------------------------------------------------------------------------
-#FUNCTIONS RELVEANT TO ARUCO DETECTION BELOW
+# FUNCTIONS RELVEANT TO ARUCO DETECTION BELOW
 
 def isRotationMatrix(R):
     Rt = np.transpose(R)
