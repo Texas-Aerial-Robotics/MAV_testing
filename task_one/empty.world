@@ -8,7 +8,8 @@
 
     <include>
       <uri>model://land_pad</uri>
-      <pose>0 0 0.1 0 0 0</pose>
+      <pose>-40 0 0.01 0 0 0</pose>
+      <name>land_pad_1</name>
     </include>
 
     <!-- Green grass ground plane -->
