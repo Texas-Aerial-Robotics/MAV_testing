@@ -6,6 +6,11 @@
       <uri>model://sun</uri>
     </include>
 
+    <include>
+      <uri>model://land_pad</uri>
+      <pose>0 0 0.1 0 0 0</pose>
+    </include>
+
     <!-- Green grass ground plane -->
     <model name="grass_field">
       <static>true</static>

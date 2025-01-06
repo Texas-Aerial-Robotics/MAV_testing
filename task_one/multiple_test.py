@@ -1,13 +1,36 @@
-from mavsdk import System
 import asyncio
 import cv2
-from Video import Video  # Import the Video class
+from Video import Video
 
-async def video_display(video_stream, drone_id):
+from field_traversal import connect_and_setup, start_offboard_mode,move_north_south, move_east, land_and_cleanup
+
+from aruco_tracking import find_aruco_markers, execute_precision_landing
+
+async def get_position(drone):
+    async for position in drone.telemetry.position():
+        print(f"Position received: {position}")
+        return position
+
+
+async def go_to_position(drone2, drone1):
+    drone1_position = await get_position(drone1)
+
+    await drone2.action.goto_location(
+        drone1_position.latitude_deg,
+        drone1_position.longitude_deg,
+        drone1_position.absolute_altitude_m,  # Use absolute altitude from drone1
+        0
+    )
+async def video_display(video_port, queue):
     """Handle video display for a single drone"""
-    window_name = f'Drone {drone_id} Camera'
-    print(f"Starting video display for Drone {drone_id}")
+    window_name = f'Drone Camera {video_port}'
     frame_count = 0
+
+    video_stream = Video(port=video_port)
+    found_count = 0
+    found_aruco = False
+
+
     
     while True:
         if video_stream.frame_available():
@@ -17,62 +40,131 @@ async def video_display(video_stream, drone_id):
                 # Make a copy of the frame before modifying it
                 display_frame = frame.copy()
                 
-                if frame_count % 30 == 0:  # Print every 30 frames
-                    print(f"Drone {drone_id}: Received frame {frame_count}")
-                    print(f"Frame shape: {frame.shape}")
-                
-                cv2.putText(display_frame, f"Drone {drone_id}", (10, 30),
-                           cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                # if frame_count % 30 == 0:  # Print every 30 frames
+                #     print(f"Drone {drone_id}: Received frame {frame_count}")
+                #     print(f"Frame shape: {frame.shape}")
+
+                bbx, ids = find_aruco_markers(display_frame)
+                if ids is not None:
+                    cv2.putText(display_frame, f"Marker ID: {ids[0]}", (10, 60),
+                                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                    # Get marker center coordinates
+                    marker = bbx[0][0]
+                    center_x = int((marker[0][0] + marker[2][0]) / 2)
+                    center_y = int((marker[0][1] + marker[2][1]) / 2)
+                    cv2.putText(display_frame, f"Pos: ({center_x},{center_y})", (10, 90),
+                                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                    found_count += 1
+
+                    if found_count == 10:
+                        # pretty sure we've found a marker
+                        found_aruco = True
+                        await queue.put(found_aruco)
+                        found_count = 0
+                        found_aruco = False
+
+
+
+
+                cv2.putText(display_frame, f"Video Feed: {video_port}", (10, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
                 cv2.imshow(window_name, display_frame)
+
                 cv2.waitKey(1)
         
         await asyncio.sleep(0.01)
 
-async def drone_operation(address, port, drone_id, video_port):
-    
-        print(f"[Drone {drone_id}] Starting video stream on port {video_port}")
-        video_stream = Video(port=video_port)
-        video_task = asyncio.create_task(video_display(video_stream, drone_id))
-        
-        print(f"[Drone {drone_id}] Connecting to {address}:{port}...")
-        drone = System(mavsdk_server_address=address, port=port)
-        await drone.connect()
-        
-        print(f"[Drone {drone_id}] Waiting for connection...")
-        async for state in drone.core.connection_state():
-            if state.is_connected:
-                print(f"[Drone {drone_id}] Connected!")
-                break
-        
-        print(f"[Drone {drone_id}] Arming...")
-        await drone.action.arm()
-        
-        print(f"[Drone {drone_id}] Taking off...")
-        await drone.action.takeoff()
-        
-        print(f"[Drone {drone_id}] Hovering and streaming video...")
-        await asyncio.sleep(30)
-        
+async def scouting(drone, target_altitude):
+
+
+        if not await start_offboard_mode(drone, target_altitude):
+            return
+
+        # Execute flight path
+        current_north = 0
+        current_east = 0
+
+        current_north = await move_north_south(drone, target_altitude, current_north, current_east, 25, "north")
+
+        current_east = await move_east(drone, target_altitude, current_north, current_east, 20)
+
+        current_north = await move_north_south(drone, target_altitude, current_north, current_east, 55, "south")
+
+        current_east = await move_east(drone, target_altitude, current_north, current_east, 20)
+
+        current_north = await move_north_south(drone, target_altitude, current_north, current_east, 55, "north")
+
+        current_east = await move_east(drone, target_altitude, current_north, current_east, 20)
+
+        current_north = await move_north_south(drone, target_altitude, current_north, current_east, 55, "south")
+
+        current_east = await move_east(drone, target_altitude, current_north, current_east, 20)
+
+        current_north = await move_north_south(drone, target_altitude, current_north, current_east, 55, "north")
+
+        current_east = await move_east(drone, target_altitude, current_north, current_east, 20)
+
+        current_north = await move_north_south(drone, target_altitude, current_north, current_east, 55, "south")
+
+        current_east = await move_east(drone, target_altitude, current_north, current_east, 20)
+
+        current_north = await move_north_south(drone, target_altitude, current_north, current_east, 55, "north")
+
+        await land_and_cleanup(drone)
 
 async def main():
-    drones = [
-        {"address": "127.0.0.1", "port": 50051, "id": 1, "video_port": 5601},
-        {"address": "127.0.0.1", "port": 50052, "id": 2, "video_port": 5602},
-    ]
-    
+
+
+    scout_drone, target_altitude = await connect_and_setup(50051)
+
+
+
+
+    scouting_queue = asyncio.Queue()
+    delivery_queue = asyncio.Queue()
+
+    async def moniter_queue():
+
+        delivery_drone = None
+        while True:
+            if not scouting_queue.empty():
+                found_aruco = await scouting_queue.get()
+
+                print(found_aruco)
+
+                if found_aruco:
+                    delivery_drone, target_altitude = await connect_and_setup(50052)
+
+                    await start_offboard_mode(delivery_drone, target_altitude + 5)
+
+                    break
+            await asyncio.sleep(0.01)
+
+        await go_to_position(delivery_drone, scout_drone)
+
+        await asyncio.sleep(10)
+
+        landing_task = asyncio.create_task(execute_precision_landing(delivery_drone, Video(5602)))
+        await landing_task  # Wait for landing to complete
+
+
     tasks = [
-        drone_operation(
-            drone["address"],
-            drone["port"],
-            drone["id"],
-            drone["video_port"]
-        )
-        for drone in drones
+
+        scouting(scout_drone, target_altitude),
+        video_display(5601, scouting_queue),
+        moniter_queue()
+
     ]
-    
+
     await asyncio.gather(*tasks)
 
+
+
+
+
+
+
+
 if __name__ == "__main__":
-    print("Starting multiple drone operations with video streams...")
     asyncio.run(main())
    

@@ -3,6 +3,7 @@ from mavsdk.offboard import OffboardError, PositionNedYaw, VelocityNedYaw
 import asyncio
 
 
+
 async def connect_and_setup(port=50051):
     """Connect to the drone and perform initial setup"""
     print("\n=== Starting Main Function ===")
@@ -20,11 +21,11 @@ async def connect_and_setup(port=50051):
     print("Taking off...")
     await drone.action.takeoff()
     print("Waiting for takeoff completion...")
-    await asyncio.sleep(10)
+    await asyncio.sleep(5)
 
     # Get position after takeoff
     async for position in drone.telemetry.position():
-        target_altitude = position.relative_altitude_m
+        target_altitude = position.relative_altitude_m + 5
         print(f"Target altitude set to: {target_altitude:.2f} meters")
         break
 
@@ -59,7 +60,7 @@ async def move_north_south(drone, target_altitude, current_north, current_east, 
         await drone.offboard.set_position_ned(
             PositionNedYaw(north_pos, current_east, -target_altitude, 0.0)
         )
-        print(f"Position command - North: {north_pos:.1f}m, East: {current_east}m, Alt: {target_altitude:.1f}m")
+        # print(f"Position command - North: {north_pos:.1f}m, East: {current_east}m, Alt: {target_altitude:.1f}m")
         await asyncio.sleep(1)
 
     return north_pos
@@ -74,7 +75,7 @@ async def move_east(drone, target_altitude, current_north, current_east, distanc
         await drone.offboard.set_position_ned(
             PositionNedYaw(current_north, new_east, -target_altitude, 0.0)
         )
-        print(f"Position command - North: {current_north}m, East: {new_east}m, Alt: {target_altitude:.1f}m")
+        # print(f"Position command - North: {current_north}m, East: {new_east}m, Alt: {target_altitude:.1f}m")
         await asyncio.sleep(1)
 
     return current_east + distance

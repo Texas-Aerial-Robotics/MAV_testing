@@ -1,18 +1,23 @@
 import cv2
 import numpy as np
 import gi
+
 gi.require_version('Gst', '1.0')
 from gi.repository import Gst
+
 
 class Video:
     def __init__(self, port=5600):
         Gst.init(None)
         self.port = port
         self._frame = None
+
+        # Simpler pipeline configuration
         self.video_source = f'udpsrc port={self.port}'
-        self.video_codec = '! application/x-rtp, payload=96 ! rtph264depay ! h264parse ! avdec_h264'
-        self.video_decode = '! decodebin ! videoconvert ! video/x-raw,format=(string)BGR ! videoconvert'
-        self.video_sink_conf = '! appsink emit-signals=true sync=false max-buffers=2 drop=true'
+        self.video_codec = '! application/x-rtp ! rtph264depay ! avdec_h264'
+        self.video_decode = '! videoconvert ! video/x-raw,format=BGR'
+        self.video_sink_conf = '! appsink name=appsink0 emit-signals=true sync=false'
+
         self.video_pipe = None
         self.video_sink = None
         self.run()
@@ -21,7 +26,7 @@ class Video:
         if not config:
             config = [
                 'videotestsrc ! decodebin',
-                '! videoconvert ! video/x-raw,format=(string)BGR ! videoconvert',
+                '! videoconvert ! video/x-raw,format=BGR',
                 '! appsink'
             ]
         command = ' '.join(config)
@@ -39,7 +44,7 @@ class Video:
                 caps.get_structure(0).get_value('width'),
                 3
             ),
-            buffer=buf.extract_dup(0, buf.get_size()), 
+            buffer=buf.extract_dup(0, buf.get_size()),
             dtype=np.uint8
         )
         return array
