@@ -3,8 +3,18 @@ from mavsdk import System
 from mavsdk.offboard import VelocityNedYaw, PositionNedYaw
 import cv2
 import cv2.aruco as aruco
-from time import time
+from time import time, perf_counter
 from Video import Video
+import os
+import socket
+import imagezmq
+import simplejpeg
+from imutils.video import VideoStream
+
+ADDRESS = os.getenv('ADDRESS', '10.159.67.138')
+
+JPEG_QUALITY = 50
+HOSTNAME = socket.gethostname()
 
 async def video_display(video_port, queue):
     """Handle video display for a single drone"""
@@ -27,7 +37,10 @@ async def video_display(video_port, queue):
                 #     print(f"Drone {drone_id}: Received frame {frame_count}")
                 #     print(f"Frame shape: {frame.shape}")
 
+                start = perf_counter()
                 bbx, ids = find_aruco_markers(display_frame)
+                print(f"{perf_counter() - start}")
+
                 if ids is not None:
                     cv2.putText(display_frame, f"Marker ID: {ids[0]}", (10, 60),
                                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
@@ -48,9 +61,15 @@ async def video_display(video_port, queue):
 
                 cv2.putText(display_frame, f"Video Feed: {video_port}", (10, 30),
                             cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-                cv2.imshow(window_name, display_frame)
 
-                cv2.waitKey(1)
+                # Use imshow if running locally, otherwise imagezmq
+                if os.getenv('DISPLAY'):
+                    cv2.imshow(window_name, display_frame)
+                    cv2.waitKey(1)
+                else:
+                    with imagezmq.ImageSender(connect_to=f'tcp://{ADDRESS}:5555') as sender:
+                        jpg_buffer = simplejpeg.encode_jpeg(display_frame, JPEG_QUALITY, colorspace='BGR')
+                        reply = sender.send_jpg(HOSTNAME, jpg_buffer)
 
         await asyncio.sleep(0.01)
 
@@ -58,11 +77,11 @@ async def video_display(video_port, queue):
 def find_aruco_markers(img):
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     dictionaries = [
-        cv2.aruco.DICT_4X4_250,
-        cv2.aruco.DICT_5X5_250,
+        # cv2.aruco.DICT_4X4_250,
+        # cv2.aruco.DICT_5X5_250,
         cv2.aruco.DICT_6X6_250,
-        cv2.aruco.DICT_7X7_250,
-        cv2.aruco.DICT_ARUCO_ORIGINAL
+        # cv2.aruco.DICT_7X7_250,
+        # cv2.aruco.DICT_ARUCO_ORIGINAL
     ]
 
     for dict_type in dictionaries:
@@ -198,22 +217,27 @@ async def execute_precision_landing(drone, video_source, initial_altitude=-4):
 
 # Example usage:
 async def main():
-    drone = System()
-    await drone.connect(system_address="udp://:14540")
+    # drone = System()
+    # await drone.connect(system_address="udp://:14540")
 
-    # Wait for connection
-    async for state in drone.core.connection_state():
-        if state.is_connected:
-            break
+    # # Wait for connection
+    # async for state in drone.core.connection_state():
+    #     if state.is_connected:
+    #         break
 
-    await drone.action.arm()
+    # await drone.action.arm()
 
     from Video import Video
     video_source = Video(port=5601)
 
-    # Execute precision landing
-    success = await execute_precision_landing(drone, video_source)
-    print(f"Precision landing {'successful' if success else 'failed'}")
+    queue = asyncio.Queue()
+
+
+    await video_display(5601,queue)
+
+    # # Execute precision landing
+    # success = await execute_precision_landing(drone, video_source)
+    # print(f"Precision landing {'successful' if success else 'failed'}")
 
 
 if __name__ == "__main__":
