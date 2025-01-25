@@ -1,7 +1,7 @@
-# Scripting drone navigation with MAVSDK
----
+# Scripting Drone Navigation with MAVSDK
 
-This project will test MAVSDK to navigate TARs drones autonomously.
+This project demonstrates how to use **MAVSDK** to autonomously navigate TARS drones. It provides an environment for testing Python-based drone control scripts using MAVSDK and related tools.
+
 
 ## Sources:
 
@@ -12,12 +12,26 @@ This project will test MAVSDK to navigate TARs drones autonomously.
 - jMAVSim: https://github.com/PX4/jMAVSim , https://docs.px4.io/main/en/sim_jmavsim/index.html
 - MAVSDK: https://mavsdk.mavlink.io/main/en/index.html
 
+---
 
-RUN THIS TO START MAVSDK_SERVER
+## 1. Project Overview
 
-/home/tar/px4_pymavlink_testing/myenv/lib/python3.8/site-packages/mavsdk/bin/mavsdk_server serial:///dev/ttyACM0:57600
+This repository aims to provide scripts and guidance on using **MAVSDK** (and its Python bindings) for drone navigation. It includes:
 
+- Examples demonstrating connection to a drone (real or simulated).
+- Scripts to command basic autonomous flight maneuvers.
+- References to essential tools like **QGroundControl**, **Mission Planner**, and more.
 
-RUN THIS TO START FPV_MODE SCRIPT
+---
 
-python /home/tar/px4_pymavlink_testing/simulation/pymavlink_testing/example/fpv_mode_mavsdk.py
+## 2. Prerequisites
+
+Make sure you have the following installed and properly set up:
+
+- **Python 3.7+**  
+- **MAVSDK-Python**  
+- **PyMAVlink** (optional, for lower-level MAVLink handling)  
+- **PX4 or ArduPilot** firmware (for simulations or real drone flight controllers)  
+- A **Flight Controller** connected via USB, serial, or UDP (if testing with real hardware)  
+- A **Simulator** such as **Gazebo** (if testing in simulation)
+
