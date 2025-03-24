@@ -27,7 +27,7 @@ if not os.getenv("NO_LOG"):
 logger.addHandler(console_handler)
 
 
-async def log_receiver(address="tcp://0.0.0.0:7777"):
+async def log_receiver(address="tcp://10.42.0.2:7777"):
     context = zmq.asyncio.Context()
     socket = context.socket(zmq.SUB)
     socket.connect(address)
@@ -60,7 +60,7 @@ async def log_receiver(address="tcp://0.0.0.0:7777"):
 
 async def main():
     while True:
-        print("Waiting...")
+        #print("Waiting...")
         await asyncio.sleep(5)
 
 

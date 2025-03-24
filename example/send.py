@@ -39,7 +39,7 @@ class ZMQLoggingHandler(logging.Handler):
             self.handleError(record)
 
 
-zmq_handler = ZMQLoggingHandler(address=os.getenv("ZMQ_ADDRESS", "tcp://10.42.0.1:7777"))
+zmq_handler = ZMQLoggingHandler(address=os.getenv("ZMQ_ADDRESS", "tcp://10.42.0.2:7777"))
 formatter = logging.Formatter("%(levelname)s - %(message)s")
 zmq_handler.setFormatter(formatter)
 
