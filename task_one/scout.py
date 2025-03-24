@@ -17,18 +17,20 @@ import zmq
 import zmq.asyncio
 from datetime import datetime
 import json
+import traceback
 
-ADDRESS = os.getenv("ADDRESS", "192.168.172.213")
+ADDRESS = os.getenv("ADDRESS", "10.42.0.159")
 PORT = 5555
 
 ARUCO_THRESHOLD = 1
+MARKER_NUM = 20
 
 INITIAL_ALTITUDE = 1.5
 INITIAL_ROTATION = 90
 
 TAKEOFF_DELAY = 10
 
-MARKER_NUM = 20
+CENTER_TIMEOUT = 20
 
 JPEG_QUALITY = 50
 HOSTNAME = socket.gethostname()
@@ -254,6 +256,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
     w, h = 1280, 720
     marker_timeout = 0.6  # seconds
     last_marker_position = None
+    last_marker_gps_coords = None
     marker_detected_time = None
 
     try:
@@ -263,6 +266,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
 
         logger.info("Video started!")
 
+        """
         logger.info("Arming...")
         await drone.action.arm()
 
@@ -279,21 +283,30 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
             logger.info("-- Disarming")
             await drone.action.disarm()
             return
+        """
 
         logger.info("Offboard mode started.")
 
+        """
         logger.info("Taking off...")
         await drone.offboard.set_position_ned(
             PositionNedYaw(0, 0, initial_altitude, INITIAL_ROTATION)
         )
 
         await asyncio.sleep(TAKEOFF_DELAY)
+        """
 
         logger.info("Takeoff finished.")
 
         marker_found_counts = {}
 
+        loop_time = None
+
         while True:
+            if loop_time:
+                logger.debug(f"Last loop time: {perf_counter() - loop_time}")
+            loop_time = perf_counter()
+
             if video_source.frame_available():
                 logger.debug("Got frame!")
                 frame = video_source.frame()
@@ -322,19 +335,27 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
                                 else:
                                     marker_found_counts[marker_id] = 1
 
+                                if marker_found_counts[marker_id] < ARUCO_THRESHOLD:
+                                    continue
+
                                 # aruco.drawDetectedMarkers(frame, bbox, ids)
+                                print(1)
                                 last_marker_position = bbox[i]
+                                print(2)
                                 marker_detected_time = time()
                                 marker_found = True
 
                                 logger.debug(f"Found valid marker {marker_id}")
 
-                                # TODO: set location globally
+                                # TODO: save location locally (to last_marker_gps_coords)
                                 # (can't get GPS position unless it has connection)
+                                # Use dict format expected by delivery
+                                """
                                 async for pos in drone.telemetry.position():
                                     logger.info(str(pos))
                                 async for gps in drone.telemetry.gps_info():
                                     logger.info(str(gps))
+                                """
                             else:
                                 logger.debug(f"Ignoring invalid marker {marker_id}")
 
@@ -352,7 +373,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
                         last_marker_position = None
 
                 if last_marker_position is not None:
-                    continue
+                    # continue
 
                     # Calculate control inputs
                     vx, vy, vz, ex, ey, ez = pd_controller.calculate_control(
@@ -363,20 +384,36 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
                     logger.debug(
                         f"Setting velocity; error: {ey:.2f}, {ex:.2f}, {ez:.2f}; correction: {vy:.2f}, {vx:.2f}, {vz:.2f}"
                     )
+                    """
                     await drone.offboard.set_velocity_ned(
                         VelocityNedYaw(vy, vx, vz, INITIAL_ROTATION)
                     )
+                    """
+
+                    # Timeout; send position and return home
+                    if time() - marker_detected_time > CENTER_TIMEOUT:
+                        logger.info("Timed out after locating marker. Returning to takeoff position.")
+                        location = last_marker_gps_coords
+                        await drone.offboard.stop()
+                        await drone.action.return_to_launch()
+                        return True
+
 
                     # Check if centered for landing
-                    if abs(ex) < 4 and abs(ey) < 4:
-                        logger.info("Landing...")
+                    if abs(ex) < 40 and abs(ey) < 40:
+                        logger.info("Finished locating marker. Returning to takeoff position.")
+
+                        location = last_marker_gps_coords
                         await drone.offboard.stop()
-                        await drone.action.land()
+                        await drone.action.return_to_launch()
                         return True
-                # else:
-                #     await drone.offboard.set_velocity_ned(
-                #         VelocityNedYaw(0, 0, 0, INITIAL_ROTATION)
-                #     )
+                else:
+                    """
+                    await drone.offboard.set_velocity_ned(
+                        VelocityNedYaw(0, 0, 0, INITIAL_ROTATION)
+                    )
+                    """
+                    pass
 
                 # Display frame (optional)
                 # cv2.imshow('Precision Landing View', frame)
@@ -385,6 +422,9 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
 
     except Exception as e:
         logger.error(f"Precision landing error: {e}")
+
+        if os.getenv("DEBUG"):
+            traceback.print_exc()
         return False
 
     finally:
@@ -395,7 +435,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
 async def send_location():
     while True:
         await asyncio.sleep(1)
-        if location:
+        if location is not None:
             logger.info(json.dumps(location))
 
 
@@ -405,20 +445,24 @@ async def main(video_source):
     drone = System()
     await drone.connect(system_address="udp://:14540")
 
+    """
     # Wait for connection
     async for state in drone.core.connection_state():
         if state.is_connected:
             break
+    """
 
     queue = asyncio.Queue()
 
+    """
     logger.info("Waiting for position...")
     async for health in drone.telemetry.health():
         if health.is_global_position_ok and health.is_home_position_ok:
             logger.info("Global position estimate OK")
             break
+    """
 
-    logger.info("Starting find marker")
+    logger.info("Starting find marker.")
     # Execute find marker
     success = await execute_find_marker(drone, video_source)
     logger.info(f"Find marker {'successful' if success else 'failed'}")
@@ -429,16 +473,13 @@ def run_tasks():
 
     init_logging()
 
+    # Wait for ZMQ connection to start
     sleep(2)
 
     if not logger:
         raise Exception("Failed to initialize logging.")
 
     logger.info("Started logging!")
-
-    while False and True:
-        logger.info("h")
-        sleep(1)
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
