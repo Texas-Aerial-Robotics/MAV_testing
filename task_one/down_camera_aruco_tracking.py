@@ -1,11 +1,13 @@
 import asyncio
 from mavsdk import System
-from mavsdk.offboard import VelocityNedYaw, PositionNedYaw
+from mavsdk.offboard import VelocityNedYaw, PositionNedYaw, VelocityBodyYawspeed
 import cv2
 import cv2.aruco as aruco
 from time import time
 from Video import Video  # Assuming you have a Video class for accessing camera frames
 
+
+TAKEOFF_HEIGHT = 2
 
 class PDController:
     def __init__(self):
@@ -101,11 +103,12 @@ class DroneTracker:
 
     async def track_aruco(self, bbox):
         vx, vy, vz, ex, ey, ez = self.pd_controller.calculate_control(bbox, self.w, self.h)
-        await self.drone.offboard.set_velocity_ned(
-            VelocityNedYaw(-vy, -vx, vz, 0)
+        await self.drone.offboard.set_velocity_body(
+            VelocityBodyYawspeed(-vy, -vx, vz, 0)
         )
         
         print(f"ERROR: {ex}, {ey}, {ez}")
+        print(f"CORRECTION: {-vy}, {-vx}, {vz}")
         
         if(abs(ex) < 2 and abs(ey) < 2):
             await self.drone.action.land()
@@ -115,12 +118,13 @@ class DroneTracker:
         await self.connect()
         
         await self.drone.action.arm()
-        await self.drone.offboard.set_position_ned(PositionNedYaw(0, 0, -4, 0))
+        await self.drone.offboard.set_position_ned(PositionNedYaw(0, 0, -TAKEOFF_HEIGHT, 0))
         await self.drone.offboard.start()
 
         try:
             while True:
                 if self.video.frame_available():
+                    print("frame")
                     frame = self.video.frame()
                     frame = cv2.resize(frame, (self.w, self.h))
 
@@ -130,11 +134,14 @@ class DroneTracker:
                     # Detect ArUco markers
                     aruco_found = self.find_aruco_markers(frame)
                     
+                    print(frame)
+
                     if len(aruco_found[0]) > 0:
                         
                         print("Found Aruco marker!")
                         
                         self.markers.append(aruco_found[0])
+                        print(aruco_found)
                         
                         # Marker detected, update saved position
                         self.last_marker_position = aruco_found[0]
@@ -169,7 +176,7 @@ class DroneTracker:
 
 
 async def main():
-    tracker = DroneTracker()
+    tracker = DroneTracker(video_port=5601)
     await tracker.run()
 
 if __name__ == "__main__":

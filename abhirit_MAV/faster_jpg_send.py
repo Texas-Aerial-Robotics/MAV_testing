@@ -41,6 +41,8 @@ import simplejpeg
 from   imutils.video import VideoStream
 import pyzed.sl as sl
 
+ADDRESS = os.getenv('ADDRESS', '10.159.67.138')
+
 def init_zed():
     """Initialize the ZED camera."""
     zed = sl.Camera()
@@ -62,7 +64,7 @@ try:
     zed = init_zed()
 
     # Connect to the receiver (your local machine)
-    with imagezmq.ImageSender(connect_to='tcp://10.159.67.138:5555') as sender:
+    with imagezmq.ImageSender(connect_to=f'tcp://{ADDRESS}:5555') as sender:
         image = sl.Mat()
         
         # Send images as a stream until Ctrl-C

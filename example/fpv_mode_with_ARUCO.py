@@ -61,6 +61,7 @@ class Video():
         return self._frame
 
     def frame_available(self):
+        print(self._frame)
         return self._frame is not None
 
     def run(self):
@@ -144,31 +145,31 @@ def get_keyboard_input():
 
 # Main drone control and ArUco marker detection function
 async def main():
-    print("Connecting to drone...")
-    drone = System()
-    await drone.connect(system_address="udp://:14540")
-
-    print("Waiting for drone to connect...")
-    async for state in drone.core.connection_state():
-        if state.is_connected:
-            print("-- Connected to drone!")
-            break
-
-    print("-- Arming")
-    await drone.action.arm()
-
-    print("-- Taking off")
-    await drone.action.takeoff()
-
-    # Wait for the drone to reach a stable altitude
-    await asyncio.sleep(5)
-
-    # Initial setpoint before starting offboard mode
-    initial_velocity = VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0)
-    await drone.offboard.set_velocity_body(initial_velocity)
-
-    print("-- Setting offboard mode")
-    await drone.offboard.start()
+#    print("Connecting to drone...")
+#    drone = System()
+#    await drone.connect(system_address="udp://:14540")
+#
+#    print("Waiting for drone to connect...")
+#    async for state in drone.core.connection_state():
+#        if state.is_connected:
+#            print("-- Connected to drone!")
+#            break
+#
+#    print("-- Arming")
+#    await drone.action.arm()
+#
+#    print("-- Taking off")
+#    await drone.action.takeoff()
+#
+#    # Wait for the drone to reach a stable altitude
+#    await asyncio.sleep(5)
+#
+#    # Initial setpoint before starting offboard mode
+#    initial_velocity = VelocityBodyYawspeed(0.0, 0.0, 0.0, 0.0)
+#    await drone.offboard.set_velocity_body(initial_velocity)
+#
+#    print("-- Setting offboard mode")
+#    await drone.offboard.start()
 
     # Initialize GStreamer video object for capturing the drone's camera feed
     video = Video()
@@ -179,7 +180,7 @@ async def main():
         # Get keyboard inputs and control the drone
         vals = get_keyboard_input()
         velocity = VelocityBodyYawspeed(vals[0], vals[1], vals[2], vals[3])
-        await drone.offboard.set_velocity_body(velocity)
+        # await drone.offboard.set_velocity_body(velocity)
 
         # If frame is available, display the video feed
         if video.frame_available():

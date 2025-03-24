@@ -2,7 +2,15 @@
 
 import asyncio
 from mavsdk import System
+from mavsdk.offboard import (OffboardError, PositionNedYaw)
 
+TAKEOFF_ALTITUDE = 1.5
+
+async def get_pos(drone):
+    print('-- getting pos')
+    async for pos in drone.telemetry.altitude():
+        print(pos)
+        return
 
 async def run():
 
@@ -17,19 +25,28 @@ async def run():
             print(f"-- Connected to drone!")
             break
 
-    print("Waiting for drone to have a global position estimate...")
-    async for health in drone.telemetry.health():
-        if health.is_global_position_ok and health.is_home_position_ok:
-            print("-- Global position estimate OK")
-            break
+
+    print("-- Setting position")
+    await drone.offboard.set_position_ned(PositionNedYaw(0.0,0.0,0.0,0.0))
+    await drone.offboard.start()
+
+    await get_pos(drone)
 
     print("-- Arming")
-    await drone.action.arm(10)
+    await drone.action.arm()
 
     print("-- Taking off")
-    await drone.action.takeoff(10)
+    await drone.action.set_takeoff_altitude(TAKEOFF_ALTITUDE)
+    await get_pos(drone)
+    await drone.action.takeoff()
 
-    await asyncio.sleep(10)
+
+    await get_pos(drone)
+
+    #await asyncio.sleep(5)
+    print("after delay")
+
+    await get_pos(drone)
 
     print("-- Landing")
     await drone.action.land()

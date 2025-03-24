@@ -1,0 +1,5 @@
+LED_MODE         0.000000
+LED_STROBE       0.000000
+can1.bitrate     0.000000
+dynModel         0.000000
+uavcan.node_id   0.000000
