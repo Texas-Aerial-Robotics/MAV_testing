@@ -6,6 +6,7 @@ import json
 import re
 import os
 from datetime import datetime
+import time 
 
 log_filename = datetime.now().strftime("log_%Y-%m-%d_%H-%M-%S.log")
 
@@ -58,6 +59,50 @@ async def log_receiver(address="tcp://10.42.0.2:7777"):
         logger.info(f"Received log: {message}")
 
 
+async def move_to_coordinates(drone, lat, lon, alt = 4):
+    """
+    Move the drone to the specified GPS coordinates with a fixed altitude of 4 meters.
+
+    Args:
+        drone: MAVSDK System instance
+        lat: Latitude in degrees
+        lon: Longitude in degrees
+        alt: fixed altitude of 10 meters (for now)
+
+    Returns:
+        bool: True if the drone successfully reached the target coordinates, False otherwise
+    """
+
+    try:
+        await drone.offboard.start()
+    except Exception as e:
+        logger.error("Failed to start offboard mode: {e}")
+        return False
+    
+    logger.info(f"Moving to GPS coordinates: {lat}, {lon}, {alt}")
+
+    await drone.offboard.set_position_global(lat, lon, alt)
+
+    start_time = time.time()
+
+    async for position in drone.telemetry.position():
+        current_lat = position.latitude_deg
+        current_lon = position.longitude_deg
+
+        if abs(current_lat - lat) < 0.5 and abs(current_lon - lon) < 0.5:
+            await drone.offboard.stop()
+            logger.info("Reached target position.")
+            return True
+
+        if time.time() - start_time > 240:
+            await drone.offboard.stop()
+            logger.warning("Timeout reached without reaching target position.")
+            return False
+
+    await drone.offboard.stop()
+    logger.warning("Failed to reach target position.")
+    return False
+    
 async def main():
     while True:
         #print("Waiting...")
