@@ -23,7 +23,7 @@ console_handler.setFormatter(
 
 
 class ZMQLoggingHandler(logging.Handler):
-    def __init__(self, address="tcp://127.0.0.1:5555"):
+    def __init__(self, address="tcp://127.0.0.1:7777"):
         super().__init__()
         self.address = address
         self.context = zmq.Context()
@@ -39,7 +39,7 @@ class ZMQLoggingHandler(logging.Handler):
             self.handleError(record)
 
 
-zmq_handler = ZMQLoggingHandler()
+zmq_handler = ZMQLoggingHandler(address=os.getenv("ZMQ_ADDRESS", "tcp://10.42.0.1:7777"))
 formatter = logging.Formatter("%(levelname)s - %(message)s")
 zmq_handler.setFormatter(formatter)
 
