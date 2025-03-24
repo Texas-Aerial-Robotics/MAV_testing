@@ -330,10 +330,11 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
                                 logger.debug(f"Found valid marker {marker_id}")
 
                                 # TODO: set location globally
+                                # (can't get GPS position unless it has connection)
+                                async for pos in drone.telemetry.position():
+                                    logger.info(str(pos))
                                 async for gps in drone.telemetry.gps_info():
                                     logger.info(str(gps))
-
-                                break
                             else:
                                 logger.debug(f"Ignoring invalid marker {marker_id}")
 
@@ -417,8 +418,8 @@ async def main(video_source):
             logger.info("Global position estimate OK")
             break
 
-    logger.info("Starting precision landing")
-    # # Execute precision landing
+    logger.info("Starting find marker")
+    # Execute find marker
     success = await execute_find_marker(drone, video_source)
     logger.info(f"Find marker {'successful' if success else 'failed'}")
 
