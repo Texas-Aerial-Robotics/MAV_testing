@@ -8,6 +8,8 @@ import os
 from datetime import datetime
 import time 
 
+# TODO create global drone here? 
+ 
 log_filename = datetime.now().strftime("log_%Y-%m-%d_%H-%M-%S.log")
 
 logger = logging.getLogger("logger")
@@ -51,6 +53,7 @@ async def log_receiver(address="tcp://10.42.0.2:7777"):
                 # TODO send reply
 
                 # TODO: use data...
+                # await move_to_coordinates(drone, latitude, longitude, 4)  # Altitude is 4 meters?
 
                 continue
             except Exception as err:
