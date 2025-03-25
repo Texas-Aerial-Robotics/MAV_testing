@@ -247,7 +247,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
 
     # Initialize controller and parameters
     pd_controller = PDController()
-    w, h = 1280, 720
+    w, h = 1920, 1080
     marker_timeout = 0.6  # seconds
     last_marker_position = None
     last_marker_gps_coords = None
