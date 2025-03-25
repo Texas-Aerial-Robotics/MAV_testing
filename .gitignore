@@ -2,3 +2,6 @@ venv/
 .venv/
 *.log
 *.bak
+mav*.parm
+mav.tlog
+mav.tlog.raw
