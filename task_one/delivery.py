@@ -12,6 +12,7 @@ import time
 from mavsdk import System
 from mavsdk.offboard import VelocityNedYaw, PositionNedYaw
 
+# TODO Needs to be AMSL (sea level) not AGL
 TARGET_ALTITUDE = 6
 TARGET_MARKER = 20
 
@@ -63,10 +64,13 @@ async def log_receiver(address="tcp://10.42.0.2:7777"):
                 pos_data = json.loads(message_stripped)
                 latitude = pos_data["position_result"]["latitude"]
                 longitude = pos_data["position_result"]["longitude"]
+                longitude = pos_data["position_result"]["altitude"]
 
                 # Should altitude be included?
 
-                logger.info(f"Receiver got position! {latitude}, {longitude}")
+                logger.info(
+                    f"Receiver got position! {latitude}, {longitude}, {altitude}"
+                )
 
                 # Save position, to be used in main task
                 location = pos_data["position_result"]
@@ -93,14 +97,17 @@ async def move_to_coordinates(drone, lat, lon, alt=4):
         bool: True if the drone successfully reached the target coordinates, False otherwise
     """
 
+    # TODO drone.action.goto_location could be used instead? Might be simpler
+
     try:
         await drone.offboard.start()
     except Exception as e:
-        logger.error("Failed to start offboard mode: {e}")
+        logger.error(f"Failed to start offboard mode: {e}")
         return False
 
     logger.info(f"Moving to GPS coordinates: {lat}, {lon}, {alt}")
 
+    # TODO use AMSL altitude from scout, not a constant
     await drone.offboard.set_position_global(lat, lon, alt)
 
     start_time = time.time()
@@ -180,6 +187,7 @@ async def main():
         if location is not None:
             latitude = location["latitude"]
             longitude = location["longitude"]
+            altitude = location["altitude"]
 
             move_result = await move_to_coordinates(
                 drone, latitude, longitude, TARGET_ALTITUDE

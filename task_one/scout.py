@@ -243,6 +243,8 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
         bool: True if landing successful, False otherwise
     """
 
+    global location
+
     # Initialize controller and parameters
     pd_controller = PDController()
     w, h = 1920, 1080
@@ -336,6 +338,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
                                 logger.debug(f"Found valid marker {marker_id}")
 
                                 # TODO: save location locally (to last_marker_gps_coords)
+                                # TODO: also save altitude
                                 # (can't get GPS position unless it has connection)
                                 # Use dict format expected by delivery
                                 async for pos in drone.telemetry.position():
