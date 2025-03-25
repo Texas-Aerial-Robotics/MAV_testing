@@ -88,7 +88,7 @@ def init_logging():
     logger.addHandler(console_handler)
 
 
-async def video_display(video_stream):
+async def video_display(frame):
     """Handle video display for a single drone"""
 
     window_name = f"Drone Camera"
@@ -98,79 +98,73 @@ async def video_display(video_stream):
     found_count = 0
     found_aruco = False
 
-    while True:
-        if video_stream.frame_available():
-            frame = video_stream.frame()
-            if frame is not None:
-                frame_count += 1
-                # Make a copy of the frame before modifying it
-                display_frame = frame.copy()
+    if frame is not None:
+        frame_count += 1
+        # Make a copy of the frame before modifying it
+        display_frame = frame.copy()
 
-                # if frame_count % 30 == 0:  # Print every 30 frames
-                #     print(f"Drone {drone_id}: Received frame {frame_count}")
-                #     print(f"Frame shape: {frame.shape}")
+        # if frame_count % 30 == 0:  # Print every 30 frames
+        #     print(f"Drone {drone_id}: Received frame {frame_count}")
+        #     print(f"Frame shape: {frame.shape}") 
+        #start = perf_counter()
+        bbx, ids = find_aruco_markers(display_frame)
+        # print(f"{perf_counter() - start}")
 
-                start = perf_counter()
-                bbx, ids = find_aruco_markers(display_frame)
-                # print(f"{perf_counter() - start}")
+        if ids is not None:
+            cv2.putText(
+                display_frame,
+                f"Marker ID: {ids[0]}",
+                (10, 60),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,
+                (0, 255, 0),
+                2,
+            )
+            # Get marker center coordinates
+            marker = bbx[0][0]
+            center_x = int((marker[0][0] + marker[2][0]) / 2)
+            center_y = int((marker[0][1] + marker[2][1]) / 2)
+            cv2.putText(
+                display_frame,
+                f"Pos: ({center_x},{center_y})",
+                (10, 90),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,
+                (0, 255, 0),
+                2,
+            )
+            found_count += 1
+            # print("Found Aruco Marker")
+            if found_count == 10:
+                # pretty sure we've found a marker
+                found_aruco = True
+                # await queue.put(found_aruco)
+                found_count = 0
+                found_aruco = False
 
-                if ids is not None:
-                    cv2.putText(
-                        display_frame,
-                        f"Marker ID: {ids[0]}",
-                        (10, 60),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        1,
-                        (0, 255, 0),
-                        2,
-                    )
-                    # Get marker center coordinates
-                    marker = bbx[0][0]
-                    center_x = int((marker[0][0] + marker[2][0]) / 2)
-                    center_y = int((marker[0][1] + marker[2][1]) / 2)
-                    cv2.putText(
-                        display_frame,
-                        f"Pos: ({center_x},{center_y})",
-                        (10, 90),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        1,
-                        (0, 255, 0),
-                        2,
-                    )
-                    found_count += 1
-                    # print("Found Aruco Marker")
-                    if found_count == 10:
-                        # pretty sure we've found a marker
-                        found_aruco = True
-                        # await queue.put(found_aruco)
-                        found_count = 0
-                        found_aruco = False
+        cv2.putText(
+            display_frame,
+            f"Video Feed",
+            (10, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (0, 255, 0),
+            2,
+        )
 
-                cv2.putText(
-                    display_frame,
-                    f"Video Feed",
-                    (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 255, 0),
-                    2,
+        # Use imshow if running locally, otherwise imagezmq
+        if os.getenv("DISPLAY"):
+            cv2.imshow(window_name, display_frame)
+            cv2.waitKey(1)
+        else:
+            with imagezmq.ImageSender(
+                connect_to=f"tcp://{ADDRESS}:5555"
+            ) as sender:
+                # with imagezmq.ImageSender("tcp://*:{}".format(PORT), REQ_REP=False) as sender:
+                jpg_buffer = simplejpeg.encode_jpeg(
+                    display_frame, JPEG_QUALITY, colorspace="BGR"
                 )
-
-                # Use imshow if running locally, otherwise imagezmq
-                if os.getenv("DISPLAY"):
-                    cv2.imshow(window_name, display_frame)
-                    cv2.waitKey(1)
-                else:
-                    with imagezmq.ImageSender(
-                        connect_to=f"tcp://{ADDRESS}:5555"
-                    ) as sender:
-                        # with imagezmq.ImageSender("tcp://*:{}".format(PORT), REQ_REP=False) as sender:
-                        jpg_buffer = simplejpeg.encode_jpeg(
-                            display_frame, JPEG_QUALITY, colorspace="BGR"
-                        )
-                        reply = sender.send_jpg(HOSTNAME, jpg_buffer)
-
-        await asyncio.sleep(0.01)
+                reply = sender.send_jpg(HOSTNAME, jpg_buffer)
 
 
 def find_aruco_markers(img):
@@ -212,7 +206,7 @@ class PDController:
         if len(bbox) == 0:
             return 0, 0, 0, 0, 0, 0
 
-        marker = bbox[0][0]
+        marker = bbox[0]
         center_x = int((marker[0][0] + marker[2][0]) / 2)
         center_y = int((marker[0][1] + marker[2][1]) / 2)
         area = abs((marker[2][0] - marker[0][0]) * (marker[2][1] - marker[0][1]))
@@ -304,7 +298,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
 
         while True:
             if loop_time:
-                logger.debug(f"Last loop time: {perf_counter() - loop_time}")
+                logger.debug(f"Last loop time: {perf_counter() - loop_time:.5f}")
             loop_time = perf_counter()
 
             if video_source.frame_available():
@@ -390,14 +384,6 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
                     )
                     """
 
-                    # Timeout; send position and return home
-                    if time() - marker_detected_time > CENTER_TIMEOUT:
-                        logger.info("Timed out after locating marker. Returning to takeoff position.")
-                        location = last_marker_gps_coords
-                        await drone.offboard.stop()
-                        await drone.action.return_to_launch()
-                        return True
-
 
                     # Check if centered for landing
                     if abs(ex) < 40 and abs(ey) < 40:
@@ -409,16 +395,25 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
                         return True
                 else:
                     """
+                    # Hold position
                     await drone.offboard.set_velocity_ned(
                         VelocityNedYaw(0, 0, 0, INITIAL_ROTATION)
                     )
                     """
-                    pass
 
-                # Display frame (optional)
-                # cv2.imshow('Precision Landing View', frame)
-                # if cv2.waitKey(1) & 0xFF == ord('q'):
-                #    break
+                    # Timeout; send position and return home
+                    if marker_detected_time:
+                        logger.debug(f"Time since last detection: {time() - marker_detected_time:.2f}")
+                    if marker_detected_time and time() - marker_detected_time > CENTER_TIMEOUT:
+                        logger.info("Timed out after locating marker. Returning to takeoff position.")
+                        location = last_marker_gps_coords
+                        await drone.offboard.stop()
+                        await drone.action.return_to_launch()
+                        return True
+
+
+                if os.getenv("SHOW_VIDEO"):
+                    await video_display(frame)
 
     except Exception as e:
         logger.error(f"Precision landing error: {e}")
@@ -486,11 +481,11 @@ def run_tasks():
 
     # Run all tasks concurrently
     task1 = main(video_source)
-    task2 = video_display(video_source)
+    #task2 = video_display(video_source)
     task3 = send_location()
 
     loop.create_task(task1)
-    loop.create_task(task2)
+    #loop.create_task(task2)
     loop.create_task(task3)
 
     # await asyncio.gather(task1, task2, task3)
