@@ -345,12 +345,6 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
                             else:
                                 logger.debug(f"Ignoring invalid marker {marker_id}")
 
-                        # if ids is not None and ids[0][0] == MARKER_NUM:
-                        #     aruco.drawDetectedMarkers(frame, bbox, ids)
-                        #     last_marker_position = bbox
-                        #     marker_detected_time = time()
-                        #     marker_found = True
-
                 if not marker_found and last_marker_position is not None:
                     # Use last known position if within timeout
                     if time() - marker_detected_time > marker_timeout:
@@ -422,13 +416,16 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
 
 async def send_location():
     while True:
-        await asyncio.sleep(1)
+        # Send location continuously if available  to mitigate temporary connection loss
         if location is not None:
             logger.info(json.dumps(location))
+        await asyncio.sleep(1)
 
 
 # Example usage:
-async def main(video_source):
+async def main():
+    video_source = Video(port=5601)
+
     logger.info("Connecting to drone...")
     drone = System()
     await drone.connect(system_address="udp://:14540")
@@ -452,8 +449,6 @@ async def main(video_source):
 
 
 def run_tasks():
-    video_source = Video(port=5601)
-
     init_logging()
 
     # Wait for ZMQ connection to start
@@ -468,15 +463,8 @@ def run_tasks():
     asyncio.set_event_loop(loop)
 
     # Run all tasks concurrently
-    task1 = main(video_source)
-    # task2 = video_display(video_source)
-    task3 = send_location()
-
-    loop.create_task(task1)
-    # loop.create_task(task2)
-    loop.create_task(task3)
-
-    # await asyncio.gather(task1, task2, task3)
+    loop.create_task(main())
+    loop.create_task(send_location())
 
     try:
         loop.run_forever()
@@ -485,5 +473,4 @@ def run_tasks():
 
 
 if __name__ == "__main__":
-    # asyncio.run(run_tasks())
     run_tasks()
