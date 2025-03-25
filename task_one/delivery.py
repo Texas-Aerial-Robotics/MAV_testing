@@ -64,7 +64,7 @@ async def log_receiver(address="tcp://10.42.0.2:7777"):
                 pos_data = json.loads(message_stripped)
                 latitude = pos_data["position_result"]["latitude"]
                 longitude = pos_data["position_result"]["longitude"]
-                longitude = pos_data["position_result"]["altitude"]
+                altitude = pos_data["position_result"]["altitude"]
 
                 # Should altitude be included?
 
