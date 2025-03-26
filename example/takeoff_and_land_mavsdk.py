@@ -15,7 +15,7 @@ async def get_pos(drone):
 async def run():
 
     drone = System()
-    await drone.connect(system_address="udp://:14445")
+    await drone.connect(system_address="udp://:14540")
 
     status_text_task = asyncio.ensure_future(print_status_text(drone))
 
@@ -30,23 +30,24 @@ async def run():
     await drone.offboard.set_position_ned(PositionNedYaw(0.0,0.0,0.0,0.0))
     await drone.offboard.start()
 
-    await get_pos(drone)
-
     print("-- Arming")
     await drone.action.arm()
 
     print("-- Taking off")
     await drone.action.set_takeoff_altitude(TAKEOFF_ALTITUDE)
-    await get_pos(drone)
     await drone.action.takeoff()
 
-
-    await get_pos(drone)
-
-    #await asyncio.sleep(5)
+    await asyncio.sleep(5)
     print("after delay")
 
-    await get_pos(drone)
+    async for pos in drone.telemetry.position():
+        print(str(pos))
+        print(str(pos.latitude_deg))
+        break
+    async for gps in drone.telemetry.gps_info():
+        print(str(gps))
+        break
+
 
     print("-- Landing")
     await drone.action.land()

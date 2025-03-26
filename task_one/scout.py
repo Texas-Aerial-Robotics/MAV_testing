@@ -343,8 +343,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
                                 # Use dict format expected by delivery
                                 async for pos in drone.telemetry.position():
                                     logger.info(str(pos))
-                                async for gps in drone.telemetry.gps_info():
-                                    logger.info(str(gps))
+                                    break
                             else:
                                 logger.debug(f"Ignoring invalid marker {marker_id}")
 
