@@ -5,3 +5,6 @@ venv/
 mav*.parm
 mav.tlog
 mav.tlog.raw
+
+__pycache__/
+.mav.sh.swp
