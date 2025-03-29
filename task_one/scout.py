@@ -36,7 +36,10 @@ JPEG_QUALITY = 50
 HOSTNAME = socket.gethostname()
 
 logger = None
+log_filename = None
 location = None
+
+result = None
 
 
 class ZMQLoggingHandler(logging.Handler):
@@ -58,6 +61,7 @@ class ZMQLoggingHandler(logging.Handler):
 
 def init_logging():
     global logger
+    global log_filename
 
     log_filename = datetime.now().strftime("log_%Y-%m-%d_%H-%M-%S.log")
 
@@ -258,6 +262,8 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
         while not video_source.frame_available():
             await asyncio.sleep(0.1)
 
+        result = cv2.VideoWriter(f'{log_filename}.avi', cv2.VideoWriter_fourcc(*'MJPG'), 10, (1920, 1080))
+
         logger.info("Video started!")
 
         logger.info("Arming...")
@@ -324,6 +330,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
                                     marker_found_counts[marker_id] += 1
                                 else:
                                     marker_found_counts[marker_id] = 1
+                                    logger.info(f"Found non-drop marker: {marker_id}")
 
                                 if marker_found_counts[marker_id] < ARUCO_THRESHOLD:
                                     continue
@@ -335,7 +342,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
                                 marker_detected_time = time()
                                 marker_found = True
 
-                                logger.debug(f"Found valid marker {marker_id}")
+                                logger.info(f"Found target marker: {marker_id}")
 
                                 # TODO: save location locally (to last_marker_gps_coords)
                                 # TODO: also save altitude
@@ -403,6 +410,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
 
                 if os.getenv("SHOW_VIDEO"):
                     await video_display(frame)
+                    result.write(frame)
 
     except Exception as e:
         logger.error(f"Precision landing error: {e}")
@@ -449,6 +457,8 @@ async def main():
     success = await execute_find_marker(drone, video_source)
     logger.info(f"Find marker {'successful' if success else 'failed'}")
 
+    result.release()
+
 
 def run_tasks():
     init_logging()
@@ -471,6 +481,7 @@ def run_tasks():
     try:
         loop.run_forever()
     except KeyboardInterrupt:
+        result.release()
         print("Shutting down.")
 
 

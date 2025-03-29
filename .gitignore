@@ -1,6 +1,7 @@
 venv/
 .venv/
 *.log
+*.avi
 *.bak
 mav*.parm
 mav.tlog
