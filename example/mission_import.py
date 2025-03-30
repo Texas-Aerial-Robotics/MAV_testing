@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 
 import asyncio
+import os
 
 from mavsdk import System
 import mavsdk.mission_raw
+
+MISSION_FILE = "surveylowsmall.plan"
 
 
 async def run():
@@ -16,14 +19,22 @@ async def run():
             print(f"-- Connected to drone!")
             break
 
-    out = await drone.mission_raw.import_qgroundcontrol_mission(
-        "/tmp/surveylowsmall.plan")
+    print_mission_progress_task = asyncio.ensure_future(print_mission_progress(drone))
 
-    print(f"{len(out.mission_items)} mission items and"
-          f"{len(out.rally_items)} rally items imported.")
+    running_tasks = [print_mission_progress_task]
+    termination_task = asyncio.ensure_future(observe_is_in_air(drone, running_tasks))
+
+    out = await drone.mission_raw.import_qgroundcontrol_mission(
+        os.path.abspath(MISSION_FILE)
+    )
+
+    print(
+        f"{len(out.mission_items)} mission items and"
+        f"{len(out.geofence_items)} geofence items imported."
+    )
 
     await drone.mission_raw.upload_mission(out.mission_items)
-    #await drone.mission_raw.upload_rally_points(out.rally_items)
+    await drone.mission_raw.upload_geofence(out.geofence_items)
 
     print("Mission uploaded")
 
@@ -39,9 +50,34 @@ async def run():
     print("-- Starting mission")
     await drone.mission.start_mission()
 
-    # await termination_task
+    await termination_task
 
-    
+
+async def print_mission_progress(drone):
+    async for mission_progress in drone.mission.mission_progress():
+        print(f"Mission progress: {mission_progress.current}/{mission_progress.total}")
+
+
+async def observe_is_in_air(drone, running_tasks):
+    """Monitors whether the drone is flying or not and
+    returns after landing"""
+
+    was_in_air = False
+
+    async for is_in_air in drone.telemetry.in_air():
+        if is_in_air:
+            was_in_air = is_in_air
+
+        if was_in_air and not is_in_air:
+            for task in running_tasks:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+            await asyncio.get_event_loop().shutdown_asyncgens()
+
+            return
 
 
 if __name__ == "__main__":
