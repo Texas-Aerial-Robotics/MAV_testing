@@ -39,7 +39,9 @@ class ZMQLoggingHandler(logging.Handler):
             self.handleError(record)
 
 
-zmq_handler = ZMQLoggingHandler(address=os.getenv("ZMQ_ADDRESS", "tcp://10.42.0.2:7777"))
+zmq_handler = ZMQLoggingHandler(
+    address=os.getenv("ZMQ_ADDRESS", "tcp://10.42.0.2:7777")
+)
 formatter = logging.Formatter("%(levelname)s - %(message)s")
 zmq_handler.setFormatter(formatter)
 
@@ -52,6 +54,12 @@ logger.addHandler(zmq_handler)
 if __name__ == "__main__":
     while True:
         logger.info("Hello!")
-        pos_result = {"position_result": {"latitude": 12.345, "longitude": 45.678}}
+        pos_result = {
+            "position_result": {
+                "latitude": 12.345,
+                "longitude": 45.678,
+                "altitude": 111.0,
+            }
+        }
         logger.info(json.dumps(pos_result))
         sleep(1)
