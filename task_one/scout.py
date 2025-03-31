@@ -38,6 +38,7 @@ HOSTNAME = socket.gethostname()
 logger = None
 log_filename = None
 location = None
+landed = False
 
 result = None
 
@@ -248,6 +249,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
     """
 
     global location
+    global landed
 
     # Initialize controller and parameters
     pd_controller = PDController()
@@ -262,7 +264,10 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
         while not video_source.frame_available():
             await asyncio.sleep(0.1)
 
-        result = cv2.VideoWriter(f'{log_filename}.avi', cv2.VideoWriter_fourcc(*'MJPG'), 10, (1920, 1080))
+        if os.getenv("SHOW_VIDEO"):
+            result = cv2.VideoWriter(
+                f"{log_filename}.avi", cv2.VideoWriter_fourcc(*"MJPG"), 10, (1920, 1080)
+            )
 
         logger.info("Video started!")
 
@@ -349,7 +354,17 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
                                 # (can't get GPS position unless it has connection)
                                 # Use dict format expected by delivery
                                 async for pos in drone.telemetry.position():
-                                    logger.info(str(pos))
+                                    lat = pos.latitude_deg
+                                    long = pos.longitude_deg
+                                    alt = pos.absolute_altitude_m
+
+                                    last_marker_gps_coords = {
+                                        "position_result": {
+                                            "latitude": lat,
+                                            "longitude": long,
+                                            "altitude": alt,
+                                        }
+                                    }
                                     break
                             else:
                                 logger.debug(f"Ignoring invalid marker {marker_id}")
@@ -406,6 +421,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
                         location = last_marker_gps_coords
                         await drone.offboard.stop()
                         await drone.action.return_to_launch()
+                        await asyncio.sleep(10)
                         return True
 
                 if os.getenv("SHOW_VIDEO"):
@@ -427,13 +443,15 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
 async def send_location():
     while True:
         # Send location continuously if available  to mitigate temporary connection loss
-        if location is not None:
+        if location is not None and landed:
             logger.info(json.dumps(location))
         await asyncio.sleep(1)
 
 
 # Example usage:
 async def main():
+    global landed
+
     video_source = Video(port=5601)
 
     logger.info("Connecting to drone...")
@@ -457,7 +475,16 @@ async def main():
     success = await execute_find_marker(drone, video_source)
     logger.info(f"Find marker {'successful' if success else 'failed'}")
 
-    result.release()
+    # Wait to land before sending coordinates to delivery, to avoid collision
+    logger.info("Waiting for return to launch...")
+    async for state in drone.telemetry.armed():
+        if not state:
+            logger.info("Landed.")
+            landed = True
+            break
+
+    if os.getenv("SHOW_VIDEO"):
+        result.release()
 
 
 def run_tasks():

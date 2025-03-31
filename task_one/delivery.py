@@ -21,6 +21,9 @@ TAKEOFF_DELAY = 10
 
 TAKEOFF_ALTITUDE = 6
 
+LAT_LONG_THRESHOLD = 0.00001
+POS_REACH_TIMEOUT = 240
+
 location = None
 
 log_filename = datetime.now().strftime("log_%Y-%m-%d_%H-%M-%S.log")
@@ -91,7 +94,7 @@ async def move_to_coordinates(drone, lat, lon, alt=4):
         drone: MAVSDK System instance
         lat: Latitude in degrees
         lon: Longitude in degrees
-        alt: fixed altitude of 10 meters (for now)
+        alt: altitude AMSL
 
     Returns:
         bool: True if the drone successfully reached the target coordinates, False otherwise
@@ -116,17 +119,17 @@ async def move_to_coordinates(drone, lat, lon, alt=4):
         current_lat = position.latitude_deg
         current_lon = position.longitude_deg
 
-        if abs(current_lat - lat) < 0.5 and abs(current_lon - lon) < 0.5:
-            await drone.offboard.stop()
+        if (
+            abs(current_lat - lat) < LAT_LONG_THRESHOLD
+            and abs(current_lon - lon) < LAT_LONG_THRESHOLD
+        ):
             logger.info("Reached target position.")
             return True
 
-        if time.time() - start_time > 240:
-            await drone.offboard.stop()
+        if time.time() - start_time > POS_REACH_TIMEOUT:
             logger.warning("Timeout reached without reaching target position.")
             return False
 
-    await drone.offboard.stop()
     logger.warning("Failed to reach target position.")
     return False
 
@@ -160,20 +163,20 @@ async def main():
     await drone.action.arm()
 
     # Initial hover
-    await drone.offboard.set_position_ned(PositionNedYaw(0.0, 0.0, 0.0, 0.0))
+    # await drone.offboard.set_position_ned(PositionNedYaw(0.0, 0.0, 0.0, 0.0))
 
-    try:
-        await drone.offboard.start()
-    except OffboardError as error:
-        logger.error(
-            f"Starting offboard mode failed \
-                with error code: {error._result.result}"
-        )
-        logger.info("Disarming")
-        await drone.action.disarm()
-        return
+    # try:
+    #     await drone.offboard.start()
+    # except OffboardError as error:
+    #     logger.error(
+    #         f"Starting offboard mode failed \
+    #             with error code: {error._result.result}"
+    #     )
+    #     logger.info("Disarming")
+    #     await drone.action.disarm()
+    #     return
 
-    logger.info("Offboard mode started.")
+    # logger.info("Offboard mode started.")
 
     logger.info("Taking off...")
     await drone.action.set_takeoff_altitude(TAKEOFF_ALTITUDE)
@@ -190,7 +193,7 @@ async def main():
             altitude = location["altitude"]
 
             move_result = await move_to_coordinates(
-                drone, latitude, longitude, TARGET_ALTITUDE
+                drone, latitude, longitude, altitude
             )
 
             if not move_result:
