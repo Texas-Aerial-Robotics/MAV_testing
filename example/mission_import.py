@@ -6,7 +6,7 @@ import os
 from mavsdk import System
 import mavsdk.mission_raw
 
-MISSION_FILE = "surveylowsmall.plan"
+MISSION_FILE = "50mparkhigh.plan"
 
 
 async def run():
@@ -34,7 +34,7 @@ async def run():
     )
 
     await drone.mission_raw.upload_mission(out.mission_items)
-    await drone.mission_raw.upload_geofence(out.geofence_items)
+    #await drone.mission_raw.upload_geofence(out.geofence_items)
 
     print("Mission uploaded")
 
