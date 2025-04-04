@@ -25,10 +25,14 @@ async def run():
             print(f"-- Connected to drone!")
             break
 
+    async for health in drone.telemetry.health():
+        print(health)
+        break
+
 
     print("-- Setting position")
-    await drone.offboard.set_position_ned(PositionNedYaw(0.0,0.0,0.0,0.0))
-    await drone.offboard.start()
+    #await drone.offboard.set_position_ned(PositionNedYaw(0.0,0.0,0.0,0.0))
+    #await drone.offboard.start()
 
     print("-- Arming")
     await drone.action.arm()
@@ -42,8 +46,7 @@ async def run():
 
     async for pos in drone.telemetry.position():
         print(str(pos))
-        print(str(pos.latitude_deg))
-        break
+        # break
     async for gps in drone.telemetry.gps_info():
         print(str(gps))
         break

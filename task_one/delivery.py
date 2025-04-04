@@ -11,6 +11,7 @@ from datetime import datetime
 import time
 from mavsdk import System
 from mavsdk.offboard import VelocityNedYaw, PositionNedYaw
+from Video import Video
 
 # TODO Needs to be AMSL (sea level) not AGL
 TARGET_ALTITUDE = 6
@@ -100,24 +101,18 @@ async def move_to_coordinates(drone, lat, lon, alt=4):
         bool: True if the drone successfully reached the target coordinates, False otherwise
     """
 
-    # TODO drone.action.goto_location could be used instead? Might be simpler
-
-    try:
-        await drone.offboard.start()
-    except Exception as e:
-        logger.error(f"Failed to start offboard mode: {e}")
-        return False
-
     logger.info(f"Moving to GPS coordinates: {lat}, {lon}, {alt}")
 
-    # TODO use AMSL altitude from scout, not a constant
-    await drone.offboard.set_position_global(lat, lon, alt)
+    await drone.action.goto_location(lat, lon, alt, 0)
 
     start_time = time.time()
 
     async for position in drone.telemetry.position():
         current_lat = position.latitude_deg
         current_lon = position.longitude_deg
+
+        print(current_lat)
+        print(current_lon)
 
         if (
             abs(current_lat - lat) < LAT_LONG_THRESHOLD
@@ -159,9 +154,6 @@ async def main():
             logger.info("Connected!")
             break
 
-    logger.info("Arming...")
-    await drone.action.arm()
-
     # Initial hover
     # await drone.offboard.set_position_ned(PositionNedYaw(0.0, 0.0, 0.0, 0.0))
 
@@ -178,20 +170,30 @@ async def main():
 
     # logger.info("Offboard mode started.")
 
-    logger.info("Taking off...")
-    await drone.action.set_takeoff_altitude(TAKEOFF_ALTITUDE)
-    await drone.action.takeoff()
+    logger.info("Waiting for position...")
 
-    await asyncio.sleep(TAKEOFF_DELAY)
-
-    logger.info("Takeoff finished.")
-
+    armed = False
     while True:
         if location is not None:
             latitude = location["latitude"]
             longitude = location["longitude"]
             altitude = location["altitude"]
+            logger.info(f"Got location: {latitude:.5f}, {longitude:.5f}, {altitude:.2f}!")
 
+            if not armed:
+                logger.info("Arming...")
+                await drone.action.arm()
+
+                logger.info("Taking off...")
+                await drone.action.set_takeoff_altitude(TAKEOFF_ALTITUDE)
+                await drone.action.takeoff()
+
+                await asyncio.sleep(TAKEOFF_DELAY)
+
+                logger.info("Takeoff finished.")
+                armed = True
+
+            
             move_result = await move_to_coordinates(
                 drone, latitude, longitude, altitude
             )
@@ -206,12 +208,17 @@ async def main():
             # Once moved to position, start precision alignment using camera
             alignment_result = await align_to_marker(drone, video_stream, TARGET_MARKER)
 
-            if not alignment_result:
-                # Move to coordinates again on next loop iteration
-                logger.info("Retrying move to coordinates")
-                continue
+            #if not alignment_result:
+            #    # Move to coordinates again on next loop iteration
+            #    logger.info("Retrying move to coordinates")
+            #    continue
 
-            # TODO If alignment_result is successful, drop payload then return to launch
+
+            await drone.action.set_actuator(1, 1)
+            await asyncio.sleep(4)
+            await drone.action.return_to_launch()
+
+            return
 
         await asyncio.sleep(5)
 
