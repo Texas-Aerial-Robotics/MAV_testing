@@ -53,12 +53,11 @@ logger.addHandler(zmq_handler)
 
 if __name__ == "__main__":
     while True:
-        logger.info("Hello!")
         pos_result = {
             "position_result": {
-                "latitude": 12.345,
-                "longitude": 45.678,
-                "altitude": 111.0,
+                "latitude": 30.294163299999997,
+                "longitude": -97.7391686,
+                "altitude": 168.2410125732422,
             }
         }
         logger.info(json.dumps(pos_result))

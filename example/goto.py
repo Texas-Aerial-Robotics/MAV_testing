@@ -41,7 +41,7 @@ async def run():
     flying_alt = absolute_altitude + 1.0
     print(f"-- Flying altitude: {flying_alt}")
     # goto_location() takes Absolute MSL altitude
-    print("-- Going to location")
+    print(f"-- Going to location 30.291029299999998, -97.73711139999999")
     await drone.action.goto_location(30.291029299999998, -97.73711139999999, flying_alt, 0)
     await asyncio.sleep(10)
     print("-- Location reached")

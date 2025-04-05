@@ -25,9 +25,15 @@ async def run():
             print(f"-- Connected to drone!")
             break
 
+<<<<<<< Updated upstream
     async for health in drone.telemetry.health():
         print(health)
         break
+=======
+    async for gps in drone.telemetry.gps_info():
+        print(str(gps))
+        #break
+>>>>>>> Stashed changes
 
 
     print("-- Setting position")

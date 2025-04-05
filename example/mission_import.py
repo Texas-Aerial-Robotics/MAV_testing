@@ -6,7 +6,11 @@ import os
 from mavsdk import System
 import mavsdk.mission_raw
 
+<<<<<<< Updated upstream
 MISSION_FILE = "50mparkhigh.plan"
+=======
+MISSION_FILE = "breakpark2.plan"
+>>>>>>> Stashed changes
 
 
 async def run():
