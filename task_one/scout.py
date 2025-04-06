@@ -32,7 +32,7 @@ TAKEOFF_DELAY = 10
 
 CENTER_TIMEOUT = 20
 
-JPEG_QUALITY = 50
+JPEG_QUALITY = 70
 HOSTNAME = socket.gethostname()
 
 logger = None
@@ -166,6 +166,7 @@ async def video_display(frame):
         else:
             with imagezmq.ImageSender(connect_to=f"tcp://{ADDRESS}:5555") as sender:
                 # with imagezmq.ImageSender("tcp://*:{}".format(PORT), REQ_REP=False) as sender:
+                display_frame = cv2.resize(display_frame, (640, 480))
                 jpg_buffer = simplejpeg.encode_jpeg(
                     display_frame, JPEG_QUALITY, colorspace="BGR"
                 )
