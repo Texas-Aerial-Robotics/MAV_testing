@@ -2,7 +2,7 @@
 
 import asyncio
 from mavsdk import System
-from mavsdk.offboard import VelocityNedYaw, PositionNedYaw
+from mavsdk.offboard import VelocityBodyYawspeed, PositionNedYaw, OffboardError
 import cv2
 import cv2.aruco as aruco
 from time import time, perf_counter, sleep
@@ -192,7 +192,7 @@ def find_aruco_markers(img):
         if ids is not None:
             cv2.aruco.drawDetectedMarkers(img, bbox, ids)
 
-            logger.info("Aruco found!")
+            #logger.info("Aruco found!")
 
             return [bbox, ids]
     return [[], None]
@@ -200,9 +200,9 @@ def find_aruco_markers(img):
 
 class PDController:
     def __init__(self):
-        self.Kp_xy = 0.3
+        self.Kp_xy = 0.4
         # self.Kd_xy = 0.5
-        self.Kd_xy = 0.0
+        self.Kd_xy = 0
         self.last_error_x = 0
         self.last_error_y = 0
         self.desired_size = 11000
@@ -247,8 +247,13 @@ async def start_offboard(drone):
     logger.info("Switching to offboard mode...")
     await drone.mission.pause_mission()
     await asyncio.sleep(2)
+    await drone.action.hold()
+    await asyncio.sleep(2)
     # Initial hover
-    await drone.offboard.set_position_ned(PositionNedYaw(0.0, 0.0, 0.0, yaw))
+    #await drone.offboard.set_position_ned(PositionNedYaw(0.0, 0.0, 0.0, yaw))
+    await drone.offboard.set_velocity_body(
+        VelocityBodyYawspeed(0, 0, 0, 0)
+    )
 
     try:
         await drone.offboard.start()
@@ -282,7 +287,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
     # Initialize controller and parameters
     pd_controller = PDController()
     w, h = 1920, 1080
-    marker_timeout = 0.6  # seconds
+    marker_timeout = 10  # seconds
     last_marker_position = None
     last_marker_gps_coords = None
     marker_detected_time = None
@@ -299,7 +304,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
 
         logger.info("Video started!")
 
-        out = await drone.mission_raw.import_qgroundcontrol_mission(os.path.abspath("p3.plan"))
+        out = await drone.mission_raw.import_qgroundcontrol_mission(os.path.abspath("fbf2.plan"))
         await drone.mission_raw.upload_mission(out.mission_items)
         await drone.mission_raw.upload_geofence(out.geofence_items)
 
@@ -350,24 +355,39 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
                     if ids is not None:
                         logger.debug(f"Found markers: {ids}")
 
+                        async for pos in drone.telemetry.position():
+                            logger.debug("Getting pos...")
+                            lat = pos.latitude_deg
+                            lon = pos.longitude_deg
+                            alt = pos.absolute_altitude_m
+                            start_position = {
+                                "position_result": {
+                                    "latitude": lat,
+                                    "longitude": lon,
+                                    "altitude": alt,
+                                }
+                            }
+                            break
+
+
                         for i, marker_id in enumerate(ids.flatten()):
                             if marker_id in marker_found_counts:
                                 marker_found_counts[marker_id] += 1
                             else:
                                 marker_found_counts[marker_id] = 1
 
-                            if marker_found_counts.get("marker_id", 0) < ARUCO_THRESHOLD:
-                                continue
+                            #if marker_found_counts.get("marker_id", 0) < ARUCO_THRESHOLD:
+                            #    continue
 
                             if marker_id == MARKER_NUM:
-                                logger.info(f"Found drop zone marker: {marker_id}.")
+                                logger.info(f"Found drop zone marker: {marker_id} at {start_position}.")
                                 if not offboard:
                                     await start_offboard(drone)
                                     await asyncio.sleep(5)
                                     offboard = True
 
                             else:
-                                logger.info(f"Found non-drop marker: {marker_id}")
+                                logger.info(f"Found non-drop marker: {marker_id} at {start_position}.")
                                 continue
 
                             # aruco.drawDetectedMarkers(frame, bbox, ids)
@@ -406,14 +426,14 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
 
                     # Execute movement
                     logger.debug(
-                        f"Setting velocity; error: {ey:.2f}, {ex:.2f}, {ez:.2f}; correction: {vy:.2f}, {vx:.2f}, {vz:.2f}"
+                        f"Setting velocity; error: {ex:.2f}, {ey:.2f}, {ez:.2f}; correction: {vx:.2f}, {vy:.2f}, {vz:.2f}"
                     )
-                    await drone.offboard.set_velocity_ned(
-                        VelocityNedYaw(vy, vx, vz, yaw)
+                    await drone.offboard.set_velocity_body(
+                        VelocityBodyYawspeed(vy, -vx, vz, 0)
                     )
 
                     # Check if centered for landing
-                    if abs(ex) < 40 and abs(ey) < 40:
+                    if False and abs(ex) < 40 and abs(ey) < 40:
                         logger.info(
                             "Finished locating marker. Returning to takeoff position."
                         )
@@ -424,8 +444,8 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
                         return True
                 else:
                     # Hold position
-                    await drone.offboard.set_velocity_ned(
-                        VelocityNedYaw(0, 0, 0, yaw)
+                    await drone.offboard.set_velocity_body(
+                        VelocityBodyYawspeed(0, 0, 0, 0)
                     )
 
                     # Timeout; send position and return home
