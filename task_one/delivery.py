@@ -214,8 +214,10 @@ async def main():
             #    continue
 
 
+            logger.info("Dropping payload!")
             await drone.action.set_actuator(1, 1)
             await asyncio.sleep(4)
+            logger.info("Returning to launch.")
             await drone.action.return_to_launch()
 
             return
