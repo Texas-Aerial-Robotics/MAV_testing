@@ -23,7 +23,7 @@ ADDRESS = os.getenv("ADDRESS", "10.42.0.159")
 PORT = 5555
 
 ARUCO_THRESHOLD = 1
-MARKER_NUM = 20
+MARKER_NUM = os.getenv("MARKER_NUM", 4)
 
 INITIAL_ALTITUDE = 2.5
 INITIAL_ROTATION = 90
@@ -304,7 +304,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
 
         logger.info("Video started!")
 
-        out = await drone.mission_raw.import_qgroundcontrol_mission(os.path.abspath("fbf2.plan"))
+        out = await drone.mission_raw.import_qgroundcontrol_mission(os.path.abspath("cscan.plan"))
         await drone.mission_raw.upload_mission(out.mission_items)
         await drone.mission_raw.upload_geofence(out.geofence_items)
 
