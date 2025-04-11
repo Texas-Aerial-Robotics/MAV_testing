@@ -19,6 +19,12 @@ from datetime import datetime
 import json
 import traceback
 
+PD_KP = 0.3
+PD_KI = 0.1
+PD_KD = 0.1
+
+CONTROL_CLAMP = 0.5
+
 ADDRESS = os.getenv("ADDRESS", "10.42.0.159")
 PORT = 5555
 
@@ -200,13 +206,16 @@ def find_aruco_markers(img):
 
 class PDController:
     def __init__(self):
-        self.Kp_xy = 0.4
+        self.Kp_xy = PD_KP
+        self.Ki_xy = PD_KI
         # self.Kd_xy = 0.5
-        self.Kd_xy = 0
+        self.Kd_xy = PD_KD
         self.last_error_x = 0
         self.last_error_y = 0
         self.desired_size = 11000
         self.size_threshold = 1000
+        self.x_accum = 0
+        self.y_accum = 0
 
     def calculate_control(self, bbox, frame_width, frame_height):
         if len(bbox) == 0:
@@ -221,9 +230,17 @@ class PDController:
         error_y = center_y - frame_height / 2
         error_z = area - self.desired_size
 
-        control_x = -(self.Kp_xy * error_x + self.Kd_xy * (error_x - self.last_error_x))
-        control_y = self.Kp_xy * error_y + self.Kd_xy * (error_y - self.last_error_y)
+        self.x_accum += error_x
+        self.y_accum += error_y
+
+        control_x = -(self.Kp_xy * error_x + self.Kd_xy * (error_x - self.last_error_x)) + self.Ki_xy * self.x_accum
+        control_y = self.Kp_xy * error_y + self.Kd_xy * (error_y - self.last_error_y) + self.Ki_xy * self.y_accum
         control_z = 0.1 if abs(error_z) > self.size_threshold else 0
+
+        if abs(control_x) > CONTROL_CLAMP:
+            control_x = (-1 if control_x < 0 else 1) * CONTROL_CLAMP
+        if abs(control_y) > CONTROL_CLAMP:
+            control_y = (-1 if control_y < 0 else 1) * CONTROL_CLAMP
 
         self.last_error_x = error_x
         self.last_error_y = error_y
@@ -305,6 +322,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
         logger.info("Video started!")
 
         out = await drone.mission_raw.import_qgroundcontrol_mission(os.path.abspath("cscan.plan"))
+        await drone.mission.clear_mission()
         await drone.mission_raw.upload_mission(out.mission_items)
         await drone.mission_raw.upload_geofence(out.geofence_items)
 
