@@ -18,7 +18,7 @@ async def run():
 
     
     while True:
-        await drone.action.set_actuator(1, 1)
+        #await drone.action.set_actuator(1, 1)
         await asyncio.sleep(2)
         await drone.action.set_actuator(1, -1)
         await asyncio.sleep(2)
