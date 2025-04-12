@@ -326,7 +326,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
 
         logger.info("Video started!")
 
-        out = await drone.mission_raw.import_qgroundcontrol_mission(os.path.abspath("pltest.plan"))
+        out = await drone.mission_raw.import_qgroundcontrol_mission(os.path.abspath("cscann.plan"))
         await drone.mission.clear_mission()
         await drone.mission_raw.upload_mission(out.mission_items)
         await drone.mission_raw.upload_geofence(out.geofence_items)
