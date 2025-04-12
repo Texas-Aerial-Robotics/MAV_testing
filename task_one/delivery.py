@@ -22,7 +22,7 @@ CONTROL_CLAMP = 0.5
 
 # TODO Needs to be AMSL (sea level) not AGL
 TARGET_ALTITUDE = 2
-TARGET_MARKER = os.getenv("MARKER_NUM", 4)
+TARGET_MARKER = os.getenv("MARKER_NUM", 2)
 
 DROP_ALT = 1
 
@@ -222,6 +222,8 @@ async def move_to_coordinates(drone, lat, lon, alt=4):
 
 
 async def align_to_marker(drone, video_source, marker=TARGET_MARKER):
+    return True
+
     # TODO implement PD controller for alignment with marker (from aruco tracking script)
     pd_controller = PDController()
     w, h = 1920, 1080
@@ -435,10 +437,11 @@ async def main():
                 break
 
             await drone.action.goto_location(lat, lon, takeoff_alt + DROP_ALT, 0)
+            await asyncio.sleep(10)
             await drone.action.set_actuator(1, 1)
 
             # Once moved to position, start precision alignment using camera
-            alignment_result = await align_to_marker(drone, video_stream, TARGET_MARKER)
+            # alignment_result = await align_to_marker(drone, video_stream, TARGET_MARKER)
 
             #if not alignment_result:
             #    # Move to coordinates again on next loop iteration
