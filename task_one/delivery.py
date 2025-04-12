@@ -10,8 +10,9 @@ import os
 from datetime import datetime
 import time
 from mavsdk import System
-from mavsdk.offboard import VelocityNedYaw, PositionNedYaw
+from mavsdk.offboard import VelocityNedYaw, PositionNedYaw, VelocityBodyYawspeed
 from Video import Video
+import cv2
 
 PD_KP = 0.3
 PD_KI = 0.1
@@ -20,17 +21,17 @@ PD_KD = 0.1
 CONTROL_CLAMP = 0.5
 
 # TODO Needs to be AMSL (sea level) not AGL
-TARGET_ALTITUDE = 6
+TARGET_ALTITUDE = 2
 TARGET_MARKER = os.getenv("MARKER_NUM", 4)
 
 DROP_ALT = 1
 
-SPEED = 1.5 # m/s
+SPEED = 2.5 # m/s
 
 # Time to wait after taking off
 TAKEOFF_DELAY = 10
 
-TAKEOFF_ALTITUDE = 6
+TAKEOFF_ALTITUDE = 2
 
 LAT_LONG_THRESHOLD = 0.00001
 POS_REACH_TIMEOUT = 240
@@ -194,7 +195,7 @@ async def move_to_coordinates(drone, lat, lon, alt=4):
 
     logger.info(f"Moving to GPS coordinates: {lat}, {lon}, {alt}")
 
-    await drone.action.goto_location(lat, lon, alt, 0)
+    await drone.action.goto_location(lat, lon, takeoff_alt + TARGET_ALTITUDE, 0)
 
     start_time = time.time()
 
@@ -223,6 +224,12 @@ async def move_to_coordinates(drone, lat, lon, alt=4):
 async def align_to_marker(drone, video_source, marker=TARGET_MARKER):
     # TODO implement PD controller for alignment with marker (from aruco tracking script)
     pd_controller = PDController()
+    w, h = 1920, 1080
+    marker_timeout = 10
+    last_marker_position = None
+    last_marker_gps_coords = None
+    marker_detected_time = None
+    offboard = False
     
     if video_source.frame_available():
         frame = video_source.frame()
@@ -258,7 +265,7 @@ async def align_to_marker(drone, video_source, marker=TARGET_MARKER):
                     #    continue
 
                     if marker_id == marker:
-                        logger.info(f"Found drop zone marker: {marker_id} at {start_position}.")
+                        logger.info(f"Found drop zone marker: {marker_id}.")
                         if not offboard:
                             await start_offboard(drone)
                             await asyncio.sleep(5)
@@ -390,7 +397,6 @@ async def main():
                 logger.info("Arming...")
                 await drone.action.arm()
 
-                await drone.action.set_current_speed(SPEED)
                 await drone.action.set_takeoff_altitude(TAKEOFF_ALTITUDE)
                 await asyncio.sleep(4)
                 logger.info("Taking off...")
@@ -399,6 +405,8 @@ async def main():
                 await asyncio.sleep(TAKEOFF_DELAY)
 
                 logger.info("Takeoff finished.")
+
+                await drone.action.set_current_speed(SPEED)
                 armed = True
 
             
@@ -413,6 +421,22 @@ async def main():
                 location = None
                 continue
 
+            lat = None
+            lon = None
+            alt = None
+            async for pos in drone.telemetry.position():
+                logger.debug("Getting pos...")
+                lat = pos.latitude_deg
+                lon = pos.longitude_deg
+                alt = pos.absolute_altitude_m
+                takeoff_alt = alt
+                logger.info(f"Altitude: {alt}")
+                position = pos
+                break
+
+            await drone.action.goto_location(lat, lon, takeoff_alt + DROP_ALT, 0)
+            await drone.action.set_actuator(1, 1)
+
             # Once moved to position, start precision alignment using camera
             alignment_result = await align_to_marker(drone, video_stream, TARGET_MARKER)
 
@@ -426,11 +450,12 @@ async def main():
             lon = None
             alt = None
             async for pos in drone.telemetry.position():
-                logger.debug("Getting initial pos...")
+                logger.debug("Getting pos...")
                 lat = pos.latitude_deg
                 lon = pos.longitude_deg
                 alt = pos.absolute_altitude_m
                 takeoff_alt = alt
+                logger.info(f"Altitude: {alt}")
                 position = pos
                 break
 
