@@ -19,11 +19,14 @@ from datetime import datetime
 import json
 import traceback
 
-PD_KP = 0.7
-PD_KI = 0.7
-PD_KD = 0.1
+PD_KP = 0.07
+PD_KI = -0.001
+PD_KD = 0.0
 
-CONTROL_CLAMP = 0.5
+CONTROL_CLAMP = 50
+
+ERROR_THRESHOLD = 100
+DESCENT_SPEED = 0.4
 
 ADDRESS = os.getenv("ADDRESS", "10.42.0.159")
 PORT = 5555
@@ -213,7 +216,7 @@ class PDController:
         self.last_error_x = 0
         self.last_error_y = 0
         self.desired_size = 11000
-        self.size_threshold = 1000
+        self.size_threshold = 500
         self.x_accum = 0
         self.y_accum = 0
 
@@ -235,11 +238,13 @@ class PDController:
 
         control_x = -(self.Kp_xy * error_x + self.Kd_xy * (error_x - self.last_error_x)) + self.Ki_xy * self.x_accum
         control_y = self.Kp_xy * error_y + self.Kd_xy * (error_y - self.last_error_y) + self.Ki_xy * self.y_accum
-        control_z = 0.1 if abs(error_z) > self.size_threshold else 0
+        control_z = DESCENT_SPEED if abs(error_z) > self.size_threshold else 0
 
         if abs(control_x) > CONTROL_CLAMP:
+            logger.debug("Clamping x...")
             control_x = (-1 if control_x < 0 else 1) * CONTROL_CLAMP
         if abs(control_y) > CONTROL_CLAMP:
+            logger.debug("Clamping y...")
             control_y = (-1 if control_y < 0 else 1) * CONTROL_CLAMP
 
         self.last_error_x = error_x
@@ -321,7 +326,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
 
         logger.info("Video started!")
 
-        out = await drone.mission_raw.import_qgroundcontrol_mission(os.path.abspath("csh.plan"))
+        out = await drone.mission_raw.import_qgroundcontrol_mission(os.path.abspath("pltest.plan"))
         await drone.mission.clear_mission()
         await drone.mission_raw.upload_mission(out.mission_items)
         await drone.mission_raw.upload_geofence(out.geofence_items)
@@ -453,11 +458,11 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
                         f"Setting velocity; error: {ex:.2f}, {ey:.2f}, {ez:.2f}; correction: {vx:.2f}, {vy:.2f}, {vz:.2f}"
                     )
                     await drone.offboard.set_velocity_body(
-                        VelocityBodyYawspeed(vy, -vx, vz, 0)
+                        VelocityBodyYawspeed(-vy, -vx, vz, 0)
                     )
 
                     # Check if centered for landing
-                    if False and abs(ex) < 40 and abs(ey) < 40:
+                    if abs(ex) < ERROR_THRESHOLD and abs(ey) < ERROR_THRESHOLD and vz == 0:
                         logger.info(
                             "Finished locating marker. Returning to takeoff position."
                         )
