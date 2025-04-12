@@ -55,9 +55,9 @@ if __name__ == "__main__":
     while True:
         pos_result = {
             "position_result": {
-                "latitude": 30.3275828,
-                "longitude": -97.7306504,
-                "altitude": 206.94801330566406,
+                "latitude": 32.7289555,
+                "longitude": -97.12655679999999,
+                "altitude": 193.08201599121094,
             }
         }
         logger.info(json.dumps(pos_result))

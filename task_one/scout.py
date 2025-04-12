@@ -19,8 +19,8 @@ from datetime import datetime
 import json
 import traceback
 
-PD_KP = 0.3
-PD_KI = 0.1
+PD_KP = 0.7
+PD_KI = 0.7
 PD_KD = 0.1
 
 CONTROL_CLAMP = 0.5
@@ -321,7 +321,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
 
         logger.info("Video started!")
 
-        out = await drone.mission_raw.import_qgroundcontrol_mission(os.path.abspath("cscan.plan"))
+        out = await drone.mission_raw.import_qgroundcontrol_mission(os.path.abspath("csh.plan"))
         await drone.mission.clear_mission()
         await drone.mission_raw.upload_mission(out.mission_items)
         await drone.mission_raw.upload_geofence(out.geofence_items)
@@ -359,6 +359,12 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
 
                 # Detect ArUco markers
                 img_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                border_thickness = 300
+                if last_marker_position is None:
+                    cv2.rectangle(frame, (0,0), (frame.shape[1] - 1, frame.shape[0]-1), (0,0,0), border_thickness)
+
+
+
                 dictionaries = [
                     cv2.aruco.DICT_6X6_250,
                 ]
