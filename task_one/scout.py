@@ -32,7 +32,7 @@ ADDRESS = os.getenv("ADDRESS", "10.42.0.159")
 PORT = 5555
 
 ARUCO_THRESHOLD = 1
-MARKER_NUM = os.getenv("MARKER_NUM", 4)
+MARKER_NUM = os.getenv("MARKER_NUM", 2)
 
 INITIAL_ALTITUDE = 2.5
 INITIAL_ROTATION = 90
@@ -469,6 +469,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
 
                         location = last_marker_gps_coords
                         await drone.offboard.stop()
+                        landed = True
                         await drone.action.return_to_launch()
                         return True
                 else:
@@ -491,6 +492,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
                         )
                         location = last_marker_gps_coords
                         await drone.offboard.stop()
+                        landed = True
                         await drone.action.return_to_launch()
                         await asyncio.sleep(10)
                         return True
