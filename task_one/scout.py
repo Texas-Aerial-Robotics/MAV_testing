@@ -23,16 +23,16 @@ PD_KP = 0.07
 PD_KI = -0.001
 PD_KD = 0.0
 
-CONTROL_CLAMP = 50
+CONTROL_CLAMP = 80
 
-ERROR_THRESHOLD = 100
+ERROR_THRESHOLD = 200
 DESCENT_SPEED = 0.4
 
 ADDRESS = os.getenv("ADDRESS", "10.42.0.159")
 PORT = 5555
 
 ARUCO_THRESHOLD = 1
-MARKER_NUM = os.getenv("MARKER_NUM", 2)
+MARKER_NUM = int(os.getenv("MARKER_NUM", 4))
 
 INITIAL_ALTITUDE = 2.5
 INITIAL_ROTATION = 90
@@ -313,6 +313,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
     last_marker_position = None
     last_marker_gps_coords = None
     marker_detected_time = None
+    first_marker_detected_time = None
 
     try:
         logger.info("Waiting for video...")
@@ -326,7 +327,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
 
         logger.info("Video started!")
 
-        out = await drone.mission_raw.import_qgroundcontrol_mission(os.path.abspath("cscannnn.plan"))
+        out = await drone.mission_raw.import_qgroundcontrol_mission(os.path.abspath("pt3.plan"))
         await drone.mission.clear_mission()
         await drone.mission_raw.upload_mission(out.mission_items)
         await drone.mission_raw.upload_geofence(out.geofence_items)
@@ -422,6 +423,9 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
                             # aruco.drawDetectedMarkers(frame, bbox, ids)
                             last_marker_position = bbox[i]
                             marker_detected_time = time()
+                            if not first_marker_detected_time:
+                                first_marker_detected_time = marker_detected_time
+
                             marker_found = True
 
                             async for pos in drone.telemetry.position():
@@ -470,6 +474,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
                         location = last_marker_gps_coords
                         await drone.offboard.stop()
                         landed = True
+                        await asyncio.sleep(2)
                         await drone.action.return_to_launch()
                         return True
                 else:
@@ -485,7 +490,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
                         )
                     if (
                         marker_detected_time
-                        and time() - marker_detected_time > CENTER_TIMEOUT
+                        and time() - first_marker_detected_time > CENTER_TIMEOUT
                     ):
                         logger.info(
                             "Timed out after locating marker. Returning to takeoff position."
