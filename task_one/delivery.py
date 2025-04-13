@@ -14,14 +14,19 @@ from mavsdk.offboard import VelocityNedYaw, PositionNedYaw, VelocityBodyYawspeed
 from Video import Video
 import cv2
 
-PD_KP = 0.3
-PD_KI = 0.1
-PD_KD = 0.1
+PD_KP = 0.07
+PD_KI = -0.001
+PD_KD = 0
 
-CONTROL_CLAMP = 0.5
+ERROR_THRESHOLD = 150
+
+CONTROL_CLAMP = 50
+DESCENT_SPEED = 0.3
+
+CENTER_TIMEOUT = 20
 
 # TODO Needs to be AMSL (sea level) not AGL
-TARGET_ALTITUDE = 2
+TARGET_ALTITUDE = 3.5
 TARGET_MARKER = os.getenv("MARKER_NUM", 4)
 
 DROP_ALT = 1
@@ -31,7 +36,7 @@ SPEED = 2.5 # m/s
 # Time to wait after taking off
 TAKEOFF_DELAY = 10
 
-TAKEOFF_ALTITUDE = 2
+TAKEOFF_ALTITUDE = 3.5
 
 LAT_LONG_THRESHOLD = 0.00001
 POS_REACH_TIMEOUT = 240
@@ -107,7 +112,7 @@ class PDController:
         self.last_error_x = 0
         self.last_error_y = 0
         self.desired_size = 11000
-        self.size_threshold = 1000
+        self.size_threshold = 500
         self.x_accum = 0
         self.y_accum = 0
 
@@ -129,7 +134,7 @@ class PDController:
 
         control_x = -(self.Kp_xy * error_x + self.Kd_xy * (error_x - self.last_error_x)) + self.Ki_xy * self.x_accum
         control_y = self.Kp_xy * error_y + self.Kd_xy * (error_y - self.last_error_y) + self.Ki_xy * self.y_accum
-        control_z = 0.1 if abs(error_z) > self.size_threshold else 0
+        control_z = DESCENT_SPEED if abs(error_z) > self.size_threshold else 0
 
         if abs(control_x) > CONTROL_CLAMP:
             control_x = (-1 if control_x < 0 else 1) * CONTROL_CLAMP
@@ -222,6 +227,8 @@ async def move_to_coordinates(drone, lat, lon, alt=4):
 
 
 async def align_to_marker(drone, video_source, marker=TARGET_MARKER):
+    #return True
+
     # TODO implement PD controller for alignment with marker (from aruco tracking script)
     pd_controller = PDController()
     w, h = 1920, 1080
@@ -230,107 +237,114 @@ async def align_to_marker(drone, video_source, marker=TARGET_MARKER):
     last_marker_gps_coords = None
     marker_detected_time = None
     offboard = False
+    start_time = time.time()
     
-    if video_source.frame_available():
-        frame = video_source.frame()
-        frame = cv2.resize(frame, (w, h))
+    while time.time() - start_time < 20:
+        if video_source.frame_available():
+            frame = video_source.frame()
+            frame = cv2.resize(frame, (w, h))
 
-        # Detect ArUco markers
-        img_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        dictionaries = [
-            cv2.aruco.DICT_6X6_250,
-        ]
+            # Detect ArUco markers
+            img_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            dictionaries = [
+                cv2.aruco.DICT_6X6_250,
+            ]
 
-        marker_found = False
-        for dict_type in dictionaries:
-            aruco_dict = cv2.aruco.getPredefinedDictionary(dict_type)
-            aruco_param = cv2.aruco.DetectorParameters()
-            detector = cv2.aruco.ArucoDetector(aruco_dict, aruco_param)
-            bbox, ids, _ = detector.detectMarkers(img_gray)
+            #border_thickness = 300
+            #if last_marker_position is None:
+            #    cv2.rectangle(frame, (0,0), (frame.shape[1] - 1, frame.shape[0]-1), (0,0,0), border_thickness)
 
-            if ids is not None:
-                logger.debug(f"Found markers: {ids}")
+            marker_found = False
+            for dict_type in dictionaries:
+                aruco_dict = cv2.aruco.getPredefinedDictionary(dict_type)
+                aruco_param = cv2.aruco.DetectorParameters()
+                detector = cv2.aruco.ArucoDetector(aruco_dict, aruco_param)
+                bbox, ids, _ = detector.detectMarkers(img_gray)
 
-                async for pos in drone.telemetry.position():
-                    logger.debug("Getting pos...")
-                    lat = pos.latitude_deg
-                    lon = pos.longitude_deg
-                    alt = pos.absolute_altitude_m
-                    print(f"Found marker: {lat}, {lon}, {alt}")
-                    break
+                if ids is not None:
+                    logger.debug(f"Found markers: {ids}")
+
+                    async for pos in drone.telemetry.position():
+                        logger.debug("Getting pos...")
+                        lat = pos.latitude_deg
+                        lon = pos.longitude_deg
+                        alt = pos.absolute_altitude_m
+                        print(f"Found marker: {lat}, {lon}, {alt}")
+                        break
 
 
-                for i, marker_id in enumerate(ids.flatten()):
-                    #if marker_found_counts.get("marker_id", 0) < ARUCO_THRESHOLD:
-                    #    continue
+                    for i, marker_id in enumerate(ids.flatten()):
+                        #if marker_found_counts.get("marker_id", 0) < ARUCO_THRESHOLD:
+                        #    continue
 
-                    if marker_id == marker:
-                        logger.info(f"Found drop zone marker: {marker_id}.")
-                        if not offboard:
-                            await start_offboard(drone)
-                            await asyncio.sleep(5)
-                            offboard = True
+                        if marker_id == marker:
+                            logger.info(f"Found drop zone marker: {marker_id}.")
+                            if not offboard:
+                                await start_offboard(drone)
+                                await asyncio.sleep(5)
+                                offboard = True
 
-                    else:
-                        logger.info(f"Found non-drop marker: {marker_id} at {start_position}.")
-                        continue
+                        else:
+                            logger.info(f"Found non-drop marker: {marker_id} at {start_position}.")
+                            continue
 
-                    # aruco.drawDetectedMarkers(frame, bbox, ids)
-                    last_marker_position = bbox[i]
-                    marker_detected_time = time()
-                    marker_found = True
+                        # aruco.drawDetectedMarkers(frame, bbox, ids)
+                        last_marker_position = bbox[i]
+                        marker_detected_time = time.time()
+                        marker_found = True
 
-        if not marker_found and last_marker_position is not None:
-            # Use last known position if within timeout
-            if time() - marker_detected_time > marker_timeout:
-                last_marker_position = None
+            if not marker_found and last_marker_position is not None:
+                # Use last known position if within timeout
+                if time.time() - marker_detected_time > marker_timeout:
+                    last_marker_position = None
 
-        if last_marker_position is not None:
-            # continue
+            if last_marker_position is not None:
+                # continue
 
-            # Calculate control inputs
-            vx, vy, vz, ex, ey, ez = pd_controller.calculate_control(
-                last_marker_position, w, h
-            )
-
-            # Execute movement
-            logger.debug(
-                f"Setting velocity; error: {ex:.2f}, {ey:.2f}, {ez:.2f}; correction: {vx:.2f}, {vy:.2f}, {vz:.2f}"
-            )
-            await drone.offboard.set_velocity_body(
-                VelocityBodyYawspeed(vy, -vx, vz, 0)
-            )
-
-            # Check if centered for landing
-            if False and abs(ex) < 40 and abs(ey) < 40:
-                logger.info(
-                    "Finished locating marker."
+                # Calculate control inputs
+                vx, vy, vz, ex, ey, ez = pd_controller.calculate_control(
+                    last_marker_position, w, h
                 )
 
-                location = last_marker_gps_coords
-                await drone.offboard.stop()
-                return True
-        else:
-            # Hold position
-            await drone.offboard.set_velocity_body(
-                VelocityBodyYawspeed(0, 0, 0, 0)
-            )
-
-            # Timeout; send position and return home
-            if marker_detected_time:
+                # Execute movement
                 logger.debug(
-                    f"Time since last detection: {time() - marker_detected_time:.2f}"
+                    f"Setting velocity; error: {ex:.2f}, {ey:.2f}, {ez:.2f}; correction: {vx:.2f}, {vy:.2f}, {vz:.2f}"
                 )
-            if (
-                marker_detected_time
-                and time() - marker_detected_time > CENTER_TIMEOUT
-            ):
-                logger.info(
-                    "Timed out after locating marker."
+                await drone.offboard.set_velocity_body(
+                    VelocityBodyYawspeed(-vy, -vx, vz, 0)
                 )
-                location = last_marker_gps_coords
-                await drone.offboard.stop()
-                return True
+
+                # Check if centered for landing
+                if abs(ex) < ERROR_THRESHOLD and abs(ey) < ERROR_THRESHOLD:
+                    logger.info(
+                        "Finished locating marker."
+                    )
+
+                    location = last_marker_gps_coords
+                    await drone.offboard.stop()
+                    return True
+            else:
+                # Hold position
+                await drone.offboard.set_velocity_body(
+                    VelocityBodyYawspeed(0, 0, 0, 0)
+                )
+
+                # Timeout; send position and return home
+                if marker_detected_time:
+                    logger.debug(
+                        f"Time since last detection: {time.time() - marker_detected_time:.2f}"
+                    )
+                if (
+                    marker_detected_time
+                    and (time.time() - marker_detected_time > CENTER_TIMEOUT)
+                ):
+                    logger.info(
+                        "Timed out after locating marker."
+                    )
+                    location = last_marker_gps_coords
+                    await drone.offboard.stop()
+                    return True
+    return False
 
 
 async def main():
@@ -371,7 +385,7 @@ async def main():
     # logger.info("Offboard mode started.")
 
     
-    out = await drone.mission_raw.import_qgroundcontrol_mission(os.path.abspath("cscan.plan"))
+    out = await drone.mission_raw.import_qgroundcontrol_mission(os.path.abspath("pt3.plan"))
     await drone.mission.clear_mission()
     await drone.mission_raw.upload_geofence(out.geofence_items)
 
@@ -434,11 +448,15 @@ async def main():
                 position = pos
                 break
 
-            await drone.action.goto_location(lat, lon, takeoff_alt + DROP_ALT, 0)
-            await drone.action.set_actuator(1, 1)
+            #await drone.action.goto_location(lat, lon, alt - 1, 0)
+            #await asyncio.sleep(7)
+            #await drone.action.set_actuator(1, 1)
+            #await asyncio.sleep(2)
+            #await drone.action.set_actuator(1, -1)
 
             # Once moved to position, start precision alignment using camera
             alignment_result = await align_to_marker(drone, video_stream, TARGET_MARKER)
+            logger.info(f"Align result: {alignment_result}")
 
             #if not alignment_result:
             #    # Move to coordinates again on next loop iteration
@@ -459,12 +477,13 @@ async def main():
                 position = pos
                 break
 
-            await drone.action.goto_location(lat, lon, takeoff_alt + DROP_ALT, 0)
+            #await drone.action.goto_location(lat, lon, takeoff_alt + DROP_ALT, 0)
 
 
             logger.info("Dropping payload!")
             await drone.action.set_actuator(1, 1)
             await asyncio.sleep(4)
+            await drone.action.set_actuator(1, -1)
             logger.info("Returning to launch.")
             await drone.action.return_to_launch()
 
