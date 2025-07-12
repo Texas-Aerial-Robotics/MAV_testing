@@ -2,7 +2,7 @@ venv/
 .venv/
 *.log
 *.avi
-*.bak
+**/*.bak
 mav*.parm
 mav.tlog
 mav.tlog.raw

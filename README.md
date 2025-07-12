@@ -34,4 +34,5 @@ Make sure you have the following installed and properly set up:
 - **PX4 or ArduPilot** firmware (for simulations or real drone flight controllers)  
 - A **Flight Controller** connected via USB, serial, or UDP (if testing with real hardware)  
 - A **Simulator** such as **Gazebo** (if testing in simulation)
+- **MAVProxy**, if forwarding to a ground station is required (if testing with hardware)
 

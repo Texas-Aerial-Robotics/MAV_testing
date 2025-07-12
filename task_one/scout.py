@@ -19,11 +19,20 @@ from datetime import datetime
 import json
 import traceback
 
+PD_KP = 0.07
+PD_KI = -0.001
+PD_KD = 0.0
+
+CONTROL_CLAMP = 80
+
+ERROR_THRESHOLD = 200
+DESCENT_SPEED = 0.4
+
 ADDRESS = os.getenv("ADDRESS", "10.42.0.159")
 PORT = 5555
 
 ARUCO_THRESHOLD = 1
-MARKER_NUM = 20
+MARKER_NUM = int(os.getenv("MARKER_NUM", 4))
 
 INITIAL_ALTITUDE = 2.5
 INITIAL_ROTATION = 90
@@ -200,13 +209,16 @@ def find_aruco_markers(img):
 
 class PDController:
     def __init__(self):
-        self.Kp_xy = 0.4
+        self.Kp_xy = PD_KP
+        self.Ki_xy = PD_KI
         # self.Kd_xy = 0.5
-        self.Kd_xy = 0
+        self.Kd_xy = PD_KD
         self.last_error_x = 0
         self.last_error_y = 0
         self.desired_size = 11000
-        self.size_threshold = 1000
+        self.size_threshold = 500
+        self.x_accum = 0
+        self.y_accum = 0
 
     def calculate_control(self, bbox, frame_width, frame_height):
         if len(bbox) == 0:
@@ -221,9 +233,19 @@ class PDController:
         error_y = center_y - frame_height / 2
         error_z = area - self.desired_size
 
-        control_x = -(self.Kp_xy * error_x + self.Kd_xy * (error_x - self.last_error_x))
-        control_y = self.Kp_xy * error_y + self.Kd_xy * (error_y - self.last_error_y)
-        control_z = 0.1 if abs(error_z) > self.size_threshold else 0
+        self.x_accum += error_x
+        self.y_accum += error_y
+
+        control_x = -(self.Kp_xy * error_x + self.Kd_xy * (error_x - self.last_error_x)) + self.Ki_xy * self.x_accum
+        control_y = self.Kp_xy * error_y + self.Kd_xy * (error_y - self.last_error_y) + self.Ki_xy * self.y_accum
+        control_z = DESCENT_SPEED if abs(error_z) > self.size_threshold else 0
+
+        if abs(control_x) > CONTROL_CLAMP:
+            logger.debug("Clamping x...")
+            control_x = (-1 if control_x < 0 else 1) * CONTROL_CLAMP
+        if abs(control_y) > CONTROL_CLAMP:
+            logger.debug("Clamping y...")
+            control_y = (-1 if control_y < 0 else 1) * CONTROL_CLAMP
 
         self.last_error_x = error_x
         self.last_error_y = error_y
@@ -291,6 +313,7 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
     last_marker_position = None
     last_marker_gps_coords = None
     marker_detected_time = None
+    first_marker_detected_time = None
 
     try:
         logger.info("Waiting for video...")
@@ -304,7 +327,8 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
 
         logger.info("Video started!")
 
-        out = await drone.mission_raw.import_qgroundcontrol_mission(os.path.abspath("fbf2.plan"))
+        out = await drone.mission_raw.import_qgroundcontrol_mission(os.path.abspath("pt3.plan"))
+        await drone.mission.clear_mission()
         await drone.mission_raw.upload_mission(out.mission_items)
         await drone.mission_raw.upload_geofence(out.geofence_items)
 
@@ -341,6 +365,12 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
 
                 # Detect ArUco markers
                 img_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                border_thickness = 300
+                if last_marker_position is None:
+                    cv2.rectangle(frame, (0,0), (frame.shape[1] - 1, frame.shape[0]-1), (0,0,0), border_thickness)
+
+
+
                 dictionaries = [
                     cv2.aruco.DICT_6X6_250,
                 ]
@@ -393,6 +423,9 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
                             # aruco.drawDetectedMarkers(frame, bbox, ids)
                             last_marker_position = bbox[i]
                             marker_detected_time = time()
+                            if not first_marker_detected_time:
+                                first_marker_detected_time = marker_detected_time
+
                             marker_found = True
 
                             async for pos in drone.telemetry.position():
@@ -429,17 +462,19 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
                         f"Setting velocity; error: {ex:.2f}, {ey:.2f}, {ez:.2f}; correction: {vx:.2f}, {vy:.2f}, {vz:.2f}"
                     )
                     await drone.offboard.set_velocity_body(
-                        VelocityBodyYawspeed(vy, -vx, vz, 0)
+                        VelocityBodyYawspeed(-vy, -vx, vz, 0)
                     )
 
                     # Check if centered for landing
-                    if False and abs(ex) < 40 and abs(ey) < 40:
+                    if abs(ex) < ERROR_THRESHOLD and abs(ey) < ERROR_THRESHOLD and vz == 0:
                         logger.info(
                             "Finished locating marker. Returning to takeoff position."
                         )
 
                         location = last_marker_gps_coords
                         await drone.offboard.stop()
+                        landed = True
+                        await asyncio.sleep(2)
                         await drone.action.return_to_launch()
                         return True
                 else:
@@ -455,13 +490,14 @@ async def execute_find_marker(drone, video_source, initial_altitude=-INITIAL_ALT
                         )
                     if (
                         marker_detected_time
-                        and time() - marker_detected_time > CENTER_TIMEOUT
+                        and time() - first_marker_detected_time > CENTER_TIMEOUT
                     ):
                         logger.info(
                             "Timed out after locating marker. Returning to takeoff position."
                         )
                         location = last_marker_gps_coords
                         await drone.offboard.stop()
+                        landed = True
                         await drone.action.return_to_launch()
                         await asyncio.sleep(10)
                         return True
