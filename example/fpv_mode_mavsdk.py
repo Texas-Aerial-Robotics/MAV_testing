@@ -37,9 +37,9 @@ def get_keyboard_input():
     elif getKey("s"):
         forward = -speed
     if getKey("q"):
-        yaw_speed = yaw_speed_rate
-    elif getKey("e"):
         yaw_speed = -yaw_speed_rate
+    elif getKey("e"):
+        yaw_speed = yaw_speed_rate
 
     return [forward, right, down, yaw_speed]
 
@@ -88,6 +88,12 @@ async def main():
             break
 
         await asyncio.sleep(0.1)
+
+async def run_main():
+    init()
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
+
 
 if __name__ == "__main__":
     init()
